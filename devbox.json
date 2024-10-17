@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.13.5/.schema/devbox.schema.json",
+  "packages": {
+    "libiconv": "latest",
+    "rustup":   "latest",
+    "darwin.apple_sdk.frameworks.SystemConfiguration": {
+      "platforms": ["x86_64-darwin", "aarch64-darwin"]
+    }
+  },
+  "shell": {
+    "init_hook": [
+      "if [ ! -d $RUSTUP_HOME/toolchains -o ! -d $RUSTUP_HOME/toolchains/stable ]; then rustup default 1.81.0; fi"
+    ],
+    "scripts": {
+      "test": ["echo \"Error: no test specified\" && exit 1"]
+    }
+  }
+}

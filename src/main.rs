@@ -76,10 +76,13 @@ async fn main() {
     }
 }
 
-async fn send_request(server: &openapiv3::Server, path: &str, properties: std::collections::HashMap<String,openapiv3::ReferenceOr<Box<openapiv3::Schema>>>) {
-    let url = format!("{}{}", server.url.to_owned()     , path);
+async fn send_request(
+    server: &openapiv3::Server,
+    path: &str,
+    properties: std::collections::HashMap<String, openapiv3::ReferenceOr<Box<openapiv3::Schema>>>,
+) {
+    let url = format!("{}{}", server.url.to_owned(), path);
     let client = reqwest::Client::new();
-
 
     let mut paylaod = std::collections::HashMap::new();
     for (name, prop) in properties {
@@ -88,10 +91,13 @@ async fn send_request(server: &openapiv3::Server, path: &str, properties: std::c
         let example = item.schema_data.example.clone().unwrap(); // TODO: handle the error
         paylaod.insert(name, example);
     }
-    
+
     let s = serde_json::to_string(&paylaod).unwrap(); // TODO: handle the error
-    println!("payload: {:?}", s);   
-    let req = client.request(reqwest::Method::POST, &url).body(s).header("Content-Type", "application/json");
+    println!("payload: {:?}", s);
+    let req = client
+        .request(reqwest::Method::POST, &url)
+        .body(s)
+        .header("Content-Type", "application/json");
     let r = req.build().unwrap(); // TODO: handle the error
     println!("request: {:?}", r);
     let res = client.execute(r).await.unwrap(); // TODO: handle the error
@@ -99,32 +105,32 @@ async fn send_request(server: &openapiv3::Server, path: &str, properties: std::c
     println!("response: {:?}", res);
 }
 
-fn property_for_schema(s: &openapiv3::  Schema) -> std::collections::HashMap<String,openapiv3::ReferenceOr<Box<openapiv3::Schema>>> {
+fn property_for_schema(
+    s: &openapiv3::Schema,
+) -> std::collections::HashMap<String, openapiv3::ReferenceOr<Box<openapiv3::Schema>>> {
     let mut properties = std::collections::HashMap::new();
 
     match &s.schema_kind {
-        openapiv3::SchemaKind::Type(t) => {
-            match t {
-                openapiv3::Type::String(s) => {
-                    println!("string: {:?}", s);
+        openapiv3::SchemaKind::Type(t) => match t {
+            openapiv3::Type::String(s) => {
+                println!("string: {:?}", s);
+            }
+            openapiv3::Type::Number(n) => {
+                println!("number: {:?}", n);
+            }
+            openapiv3::Type::Object(o) => {
+                for (k, v) in &o.properties {
+                    properties.insert(k.to_owned(), v.to_owned());
                 }
-                openapiv3::Type::Number(n) => {
-                    println!("number: {:?}", n);
-                }
-                openapiv3::Type::Object(o) => {
-                    for (k, v) in &o.properties {
-                        properties.insert(k.to_owned(), v.to_owned());
-                    }
-                }
-                openapiv3::Type::Array(a) => {
-                    println!("array: {:?}", a);
-                }
-                openapiv3::Type::Boolean(b) => {
-                    println!("boolean: {:?}", b);
-                }
-                openapiv3::Type::Integer(i) => {
-                    println!("integer: {:?}", i);
-                }
+            }
+            openapiv3::Type::Array(a) => {
+                println!("array: {:?}", a);
+            }
+            openapiv3::Type::Boolean(b) => {
+                println!("boolean: {:?}", b);
+            }
+            openapiv3::Type::Integer(i) => {
+                println!("integer: {:?}", i);
             }
         },
         _ => {}
