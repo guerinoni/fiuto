@@ -44,12 +44,20 @@ async fn main() {
 
     let components = openapi_schema.components.unwrap(); // FIXME: what if there are no components?
 
-    let mut posts = collect_post(openapi_schema.paths);
+    let mut posts = collect_post(openapi_schema.paths.clone());
     populate_payload(&mut posts, components);
+
+    let gets = collect_gets(openapi_schema.paths);
 
     let base_url = "http://127.0.0.1:8000"; // FIXME: make this configurable or take from the openapi file
 
     let mut all_results = vec![];
+
+    for p in gets {
+        let result = exec_operation(p, base_url).await;
+        all_results.push(result);
+    }
+
     for p in posts {
         let result = exec_operation(p, base_url).await;
         all_results.push(result);
@@ -62,12 +70,16 @@ async fn main() {
 }
 
 async fn exec_operation(op: Op, base_url: &str) -> Vec<CallResult> {
-    let s = op.payload.unwrap(); // FIXME: what if there are no payload?
-    let mut props = property_for_schema(&s);
-    let combs = create_combination_property(&mut props);
-    let results = drill_endpoint(base_url, &op.path, combs).await;
-
-    results
+    match op.method.as_str() {
+        "GET" => drill_get_endpoint(base_url, &op.path).await,
+        "POST" => {
+            let s = op.payload.unwrap(); // FIXME: what if there are no payload?
+            let mut props = property_for_schema(&s);
+            let combs = create_combination_property(&mut props);
+            drill_post_endpoint(base_url, &op.path, combs).await
+        }
+        _ => vec![],
+    }
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -77,7 +89,22 @@ struct CallResult {
     status_code: u16,
 }
 
-async fn drill_endpoint(
+async fn drill_get_endpoint(base_url: &str, path: &str) -> Vec<CallResult> {
+    let url = format!("{base_url}{path}");
+
+    let client = reqwest::Client::new();
+    let req = client.request(reqwest::Method::GET, url.clone());
+    let r = req.build().unwrap(); // TODO: handle the error
+    let resp = client.execute(r).await.unwrap(); // TODO: handle the error
+
+    vec![CallResult {
+        payload: "".to_owned(),
+        path: url.to_string(),
+        status_code: resp.status().as_u16(),
+    }]
+}
+
+async fn drill_post_endpoint(
     base_url: &str,
     path: &str,
     prop_combinations: Vec<Vec<(&String, PropertyField)>>,
@@ -149,8 +176,29 @@ fn property_for_schema(
 
 struct Op {
     path: String,
+    method: String,
     operation: openapiv3::Operation,
     payload: Option<openapiv3::Schema>,
+}
+
+fn collect_gets(paths: openapiv3::Paths) -> Vec<Op> {
+    paths
+        .iter()
+        .map(|p| {
+            let pp = p.0.to_owned();
+            let i = p.1.to_owned();
+            let i = i.as_item();
+            let i = i.unwrap();
+            (pp, i.clone())
+        })
+        .filter(|p| p.1.get.is_some())
+        .map(|p| Op {
+            path: p.0,
+            method: "GET".to_owned(),
+            operation: p.1.get.unwrap(),
+            payload: None,
+        })
+        .collect()
 }
 
 fn collect_post(paths: openapiv3::Paths) -> Vec<Op> {
@@ -166,6 +214,7 @@ fn collect_post(paths: openapiv3::Paths) -> Vec<Op> {
         .filter(|p| p.1.post.is_some())
         .map(|p| Op {
             path: p.0,
+            method: "POST".to_owned(),
             operation: p.1.post.unwrap(),
             payload: None,
         })
@@ -256,6 +305,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scan_get() {
+        let s = std::include_str!("./testdata/get_info.yml");
+        let openapi_schema = serde_yaml::from_str(s);
+        assert!(openapi_schema.is_ok());
+
+        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
+        let gets = collect_gets(openapi_schema.paths);
+        assert_eq!(gets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn run_get_request() {
+        let state = std::sync::Arc::new(AppState {});
+        let app = axum::Router::new()
+            .route("/api/v1/org/info", axum::routing::get(info))
+            .with_state(state);
+
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        println!("listening on: {}", listener.local_addr().unwrap());
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let s = std::include_str!("./testdata/get_info.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let mut gets = collect_gets(openapi_schema.paths);
+
+        let p = gets.pop().unwrap();
+        let result = exec_operation(p, &base_url).await;
+
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
     fn scan_post() {
         let s = std::include_str!("./testdata/post_login.yml");
         let openapi_schema = serde_yaml::from_str(s);
@@ -291,7 +375,7 @@ mod tests {
         let state = std::sync::Arc::new(AppState {});
         let app = axum::Router::new()
             .route("/api/v1/login", axum::routing::post(login_handler))
-            .with_state(state); // Pass the app state to all handlers
+            .with_state(state);
 
         let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         println!("listening on: {}", listener.local_addr().unwrap());
@@ -330,5 +414,9 @@ mod tests {
             "User {} from org {} is trying to login",
             payload.email, payload.org
         ))
+    }
+
+    async fn info() -> axum::Json<&'static str> {
+        axum::Json("Hello, World!")
     }
 }

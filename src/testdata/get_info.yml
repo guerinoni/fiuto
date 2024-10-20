@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: '1.0.0'
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: Proprietary
+    url: 'https://www.fiuto.io/'
+
+tags:
+  - name: Information
+    description: Endpoints that provide user or system-related information
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/org/info:
+    get:
+      tags:
+        - Information
+      operationId: getOrgInfo
+      summary: Get Organization Information
+      description: Returns general information about the organization, including HQ location details.
+      responses:
+        '200':
+          description: Successful response containing organization information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgInfoResponse'
+        '404':
+          description: Organization not found
+
+components:
+  schemas:
+    OrgInfoResponse:
+      type: object
+      properties:
+        hq:
+          $ref: '#/components/schemas/HQ'
+
+    HQ:
+      type: object
+      properties:
+        address:
+          type: string
+          example: "123 Main St"
+        postal_code:
+          type: string
+          example: "12345"
+        city:
+          type: string
+          example: "New York"
+        state_region:
+          type: string
+          example: "NY"
+        country:
+          type: string
+          example: "USA"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
