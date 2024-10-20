@@ -12,8 +12,6 @@ info:
 tags:
   - name: Authentication
     description: Operations related to access platform
-  - name: Information
-    description: Endpoints that provide user or system-related information
 
 servers:
   - url: http://127.0.0.1:8000
@@ -43,48 +41,8 @@ paths:
                 $ref: "#/components/schemas/LoginResponse"
         "400":
           description: Bad request, invalid input
-        "401":
-          description: Unauthorized, invalid credentials
-      security:
-        - bearerAuth: []
-
-  /api/v1/me:
-    get:
-      tags:
-        - Information
-      operationId: "getMe"
-      summary: Get user details
-      description: Returns the current user's details based on the provided JWT token in the Authorization header.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Successful response with user details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "401":
-          description: Unauthorized, invalid or missing token
-
-  /api/v1/org/info:
-    get:
-      tags:
-        - Information
-      operationId: getOrgInfo
-      summary: Get Organization Information
-      description: Returns general information about the organization, including HQ location details.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Successful response containing organization information
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrgInfoResponse"
-        "404":
-          description: Organization not found
+        "422":
+          description: Unprocessable entity, invalid input
 
 components:
   schemas:
@@ -133,47 +91,3 @@ components:
       example:
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
         refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
-
-    MeResponse:
-      type: object
-      description: "User data returned for the /me endpoint"
-      properties:
-        email:
-          type: string
-          description: The user's email address.
-          example: "federico@ditta.io"
-      required:
-        - email
-      example:
-        email: "federico@ditta.io"
-
-    OrgInfoResponse:
-      type: object
-      properties:
-        hq:
-          $ref: "#/components/schemas/HQ"
-
-    HQ:
-      type: object
-      properties:
-        address:
-          type: string
-          example: "123 Main St"
-        postal_code:
-          type: string
-          example: "12345"
-        city:
-          type: string
-          example: "New York"
-        state_region:
-          type: string
-          example: "NY"
-        country:
-          type: string
-          example: "USA"
-
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT

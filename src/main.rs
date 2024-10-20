@@ -1,122 +1,110 @@
+use std::vec;
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
+    tracing::info!("fiuto v0.1.0 starting...");
+
     let file_path = match std::env::args().nth(1) {
         Some(arg) => arg,
         None => {
-            eprintln!("Usage: ./fiuto FILE");
+            tracing::error!("No file path provided, exiting...");
             std::process::exit(1);
         }
     };
+
+    if file_path == "--help" || file_path == "-h" || file_path == "help" {
+        println!("Usage: fiuto <openapi file path>");
+        std::process::exit(0);
+    }
 
     let s = match std::fs::read_to_string(file_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Error reading file: {}", e);
+            tracing::error!("Error reading file: {:?}", e);
             std::process::exit(1);
         }
     };
 
-    tracing::info!("file lines count: {}", s.lines().count());
+    let openapi_schema: openapiv3::OpenAPI = match serde_yaml::from_str(&s) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Error parsing yaml: {:?}", e);
+            std::process::exit(1);
+        }
+    };
 
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(&s).unwrap();
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
-    openapi_schema.servers.iter().for_each(|s| {
-        tracing::info!("server: {:?}", s.url);
-    });
+    // TODO: implement the server selection if any are present
+    // openapi_schema.servers.iter().for_each(|s| {
+    // tracing::info!("server: {:?}", s.url);
+    // });
 
-    let components = openapi_schema.components.unwrap();
+    let components = openapi_schema.components.unwrap(); // FIXME: what if there are no components?
 
-    let mut results = vec![];
+    let mut posts = collect_post(openapi_schema.paths);
+    populate_payload(&mut posts, components);
 
-    for (path, path_item) in openapi_schema.paths {
-        // println!("path: {}", path);
+    let base_url = "http://127.0.0.1:8000"; // FIXME: make this configurable or take from the openapi file
 
-        let item = if let Some(item) = path_item.as_item() {
-            item.to_owned()
-        } else {
-            continue;
-        };
-
-        if let Some(post) = item.post {
-            // println!("  post: {:?}", post.operation_id);
-            // println!("  request_body: {:?}", post.request_body);
-            if let Some(request_body) = post.request_body {
-                let req = if let Some(item) = request_body.as_item() {
-                    item.to_owned()
-                } else {
-                    continue;
-                };
-
-                let content = req.content;
-                for (c, media_type) in content {
-                    // println!("    content: {:?}", c);
-                    // println!("    media_type: {:?}", media_type);
-
-                    let schema = media_type.schema.unwrap();
-                    let reference = match schema {
-                        openapiv3::ReferenceOr::Reference { reference } => {
-                            // println!("    reference: {:?}", reference);
-
-                            reference
-                        }
-                        openapiv3::ReferenceOr::Item(i) => {
-                            // println!("    item: {:?}", i);
-                            "".to_owned()
-                        }
-                    };
-
-                    if reference != "" {
-                        let reference = reference.trim_start_matches("#/components/schemas/");
-                        let schema = components.schemas.get(reference).unwrap(); // TODO: handle the error
-                        let prop = property_for_schema(schema.as_item().unwrap());
-                        let r = send_request(&openapi_schema.servers[0], &path, prop).await;
-                        results.push(r);
-                    }
-                }
-            }
-        }
+    let mut all_results = vec![];
+    for p in posts {
+        let s = p.payload.unwrap(); // FIXME: what if there are no payload?
+        let mut props = property_for_schema(&s);
+        let combs = create_combination_property(&mut props);
+        let results = drill_endpoint(base_url, &p.path, combs).await;
+        all_results.push(results);
     }
 
-    for r in results {
-        match r {
-            Ok(resp) => {
-                println!("good -> {resp:#?}")
-            }
-            Err(e) => {
-                println!("err  -> {e:#?}")
-            }
-        }
+    for r in all_results {
+        let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
+        println!("{}", string_results);
     }
 }
 
-async fn send_request(
-    server: &openapiv3::Server,
+#[derive(Debug, serde::Serialize)]
+struct CallResult {
+    payload: String,
+    path: String,
+    status_code: u16,
+}
+
+async fn drill_endpoint(
+    base_url: &str,
     path: &str,
-    properties: std::collections::HashMap<String, openapiv3::ReferenceOr<Box<openapiv3::Schema>>>,
-) -> Result<reqwest::Response, reqwest::Error> {
-    let url = format!("{}{}", server.url.to_owned(), path);
+    prop_combinations: Vec<Vec<(&String, PropertyField)>>,
+) -> Vec<CallResult> {
+    let url = format!("{base_url}{path}");
+
     let client = reqwest::Client::new();
 
-    let mut paylaod = std::collections::HashMap::new();
-    for (name, prop) in properties {
-        let item = prop.as_item().unwrap();
-        // println!("item: {:#?}", item.schema_data);
-        let example = item.schema_data.example.clone().unwrap(); // TODO: handle the error
-        paylaod.insert(name, example);
+    let mut responses = vec![];
+
+    for properties in prop_combinations {
+        let mut paylaod = std::collections::HashMap::new();
+        for props in properties {
+            paylaod.insert(props.0, props.1.example.unwrap());
+        }
+
+        let s = serde_json::to_string(&paylaod).unwrap(); // TODO: handle the error
+
+        let req = client
+            .request(reqwest::Method::POST, url.clone()) // TODO: Make method configurable
+            .body(s.clone())
+            .header("Content-Type", "application/json"); // TODO: Make this configurable
+        let r = req.build().unwrap(); // TODO: handle the error
+        let resp = client.execute(r).await.unwrap(); // TODO: handle the error
+
+        responses.push(CallResult {
+            payload: s,
+            path: url.to_string(),
+            status_code: resp.status().as_u16(),
+        });
     }
 
-    let s = serde_json::to_string(&paylaod).unwrap(); // TODO: handle the error
-                                                      // println!("payload: {:?}", s);
-    let req = client
-        .request(reqwest::Method::POST, &url)
-        .body(s)
-        .header("Content-Type", "application/json");
-    let r = req.build().unwrap(); // TODO: handle the error
-                                  // println!("request: {:?}", r);
-    let res = client.execute(r).await;
-
-    res
+    responses
 }
 
 fn property_for_schema(
@@ -201,8 +189,8 @@ fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
                 openapiv3::ReferenceOr::Item(i) => "".to_owned(),
             };
 
-            if reference == "" {
-                tracing::info!("reference is empty");
+            if reference.is_empty() {
+                tracing::warn!("reference is empty");
                 continue;
             }
 
@@ -213,25 +201,57 @@ fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
             };
 
             let ss = schema.as_item();
-            o.payload = match ss {
-                Some(s) => Some(s.clone()),
-                None => None,
-            };
+            o.payload = ss.cloned();
         }
     }
 }
 
-struct CallResult {
-    resp: reqwest::Response,
+#[derive(Debug)]
+struct PropertyField {
+    example: Option<serde_json::Value>,
+    nullable: bool,
+}
+
+fn create_combination_property(
+    properties: &mut std::collections::HashMap<
+        String,
+        openapiv3::ReferenceOr<Box<openapiv3::Schema>>,
+    >,
+) -> Vec<Vec<(&String, PropertyField)>> {
+    let total_combinations = (1 << properties.len()) - 1;
+    let mut combination = vec![];
+
+    for mask in 1..=total_combinations {
+        let mut comb = vec![];
+
+        for (i, (name, value)) in properties.iter().enumerate() {
+            if (mask & (1 << i)) == 0 {
+                continue;
+            }
+
+            let v = value.as_item();
+            let v = v.unwrap();
+            let pf = PropertyField {
+                example: v.schema_data.example.clone(),
+                nullable: v.schema_data.nullable,
+            };
+
+            comb.push((name, pf));
+        }
+
+        combination.push(comb);
+    }
+
+    combination
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn post() {
-        let s = std::include_str!("./testdata/spec.yml");
+    #[tokio::test]
+    async fn run_post_request() {
+        let s = std::include_str!("./testdata/post_login.yml");
         let openapi_schema = serde_yaml::from_str(s);
         assert!(openapi_schema.is_ok());
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
@@ -249,5 +269,54 @@ mod tests {
         let f = posts.first().unwrap();
         assert_ne!(f.payload, None);
         assert_eq!(f.path, "/api/v1/login");
+
+        let s = f.payload.clone();
+        let s = s.unwrap();
+        let mut props = property_for_schema(&s);
+
+        assert_ne!(props.len(), 0);
+
+        let combs = create_combination_property(&mut props);
+        assert_eq!(combs.len(), 7);
+
+        let state = std::sync::Arc::new(AppState {});
+        let app = axum::Router::new()
+            .route("/api/v1/login", axum::routing::post(login_handler))
+            .with_state(state); // Pass the app state to all handlers
+
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        println!("listening on: {}", listener.local_addr().unwrap());
+
+        let base_url = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let base_url = format!("http://{}", base_url);
+        let results = drill_endpoint(&base_url, &f.path, combs).await;
+
+        assert_eq!(results.len(), 7);
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize, Debug)]
+    struct LoginRequest {
+        email: String,
+        password: String,
+        org: String,
+    }
+
+    #[derive(Clone)]
+    struct AppState {}
+
+    async fn login_handler(
+        axum::extract::State(state): axum::extract::State<std::sync::Arc<AppState>>,
+        axum::Json(payload): axum::Json<LoginRequest>,
+    ) -> axum::Json<String> {
+        println!("Received login request: {:?}", payload);
+        axum::Json(format!(
+            "User {} from org {} is trying to login",
+            payload.email, payload.org
+        ))
     }
 }
