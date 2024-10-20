@@ -9,7 +9,7 @@
   },
   "shell": {
     "init_hook": [
-      "if [ ! -d $RUSTUP_HOME/toolchains -o ! -d $RUSTUP_HOME/toolchains/stable ]; then rustup default 1.81.0; fi"
+      "if [ ! -d $RUSTUP_HOME/toolchains -o ! -d $RUSTUP_HOME/toolchains/stable ]; then rustup default 1.82.0; fi"
     ],
     "scripts": {
       "test": ["echo \"Error: no test specified\" && exit 1"]
