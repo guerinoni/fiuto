@@ -51,17 +51,23 @@ async fn main() {
 
     let mut all_results = vec![];
     for p in posts {
-        let s = p.payload.unwrap(); // FIXME: what if there are no payload?
-        let mut props = property_for_schema(&s);
-        let combs = create_combination_property(&mut props);
-        let results = drill_endpoint(base_url, &p.path, combs).await;
-        all_results.push(results);
+        let result = exec_operation(p, base_url).await;
+        all_results.push(result);
     }
 
     for r in all_results {
         let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
         println!("{}", string_results);
     }
+}
+
+async fn exec_operation(op: Op, base_url: &str) -> Vec<CallResult> {
+    let s = op.payload.unwrap(); // FIXME: what if there are no payload?
+    let mut props = property_for_schema(&s);
+    let combs = create_combination_property(&mut props);
+    let results = drill_endpoint(base_url, &op.path, combs).await;
+
+    results
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -249,26 +255,26 @@ fn create_combination_property(
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn run_post_request() {
+    #[test]
+    fn scan_post() {
         let s = std::include_str!("./testdata/post_login.yml");
         let openapi_schema = serde_yaml::from_str(s);
         assert!(openapi_schema.is_ok());
+
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
+        let posts = collect_post(openapi_schema.paths);
+        assert_eq!(posts.len(), 1);
+        assert_eq!(posts.first().unwrap().path, "/api/v1/login");
+    }
 
+    #[test]
+    fn check_post_payload() {
+        let s = std::include_str!("./testdata/post_login.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
         let mut posts = collect_post(openapi_schema.paths);
-        assert_eq!(posts.len(), 1);
-
-        let f = posts.first().unwrap();
-        assert_eq!(f.payload, None);
-        assert_eq!(f.path, "/api/v1/login");
-
         populate_payload(&mut posts, openapi_schema.components.unwrap());
-        assert_eq!(posts.len(), 1);
-
         let f = posts.first().unwrap();
         assert_ne!(f.payload, None);
-        assert_eq!(f.path, "/api/v1/login");
 
         let s = f.payload.clone();
         let s = s.unwrap();
@@ -278,7 +284,10 @@ mod tests {
 
         let combs = create_combination_property(&mut props);
         assert_eq!(combs.len(), 7);
+    }
 
+    #[tokio::test]
+    async fn run_post_request() {
         let state = std::sync::Arc::new(AppState {});
         let app = axum::Router::new()
             .route("/api/v1/login", axum::routing::post(login_handler))
@@ -286,17 +295,20 @@ mod tests {
 
         let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
         println!("listening on: {}", listener.local_addr().unwrap());
-
-        let base_url = listener.local_addr().unwrap();
-
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
 
-        let base_url = format!("http://{}", base_url);
-        let results = drill_endpoint(&base_url, &f.path, combs).await;
+        let s = std::include_str!("./testdata/post_login.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let mut posts = collect_post(openapi_schema.paths);
+        populate_payload(&mut posts, openapi_schema.components.unwrap());
 
-        assert_eq!(results.len(), 7);
+        let p = posts.pop().unwrap();
+        let result = exec_operation(p, &base_url).await;
+
+        assert_eq!(result.len(), 7);
     }
 
     #[derive(serde::Deserialize, serde::Serialize, Debug)]
