@@ -123,7 +123,7 @@ async fn drill_get_endpoint(base_url: &str, path: &str) -> Result<Vec<CallResult
 async fn drill_post_endpoint(
     base_url: &str,
     path: &str,
-    prop_combinations: Vec<Vec<(&String, PropertyField)>>,
+    prop_combinations: Vec<Vec<(&String, &PropertyField)>>,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
@@ -134,7 +134,11 @@ async fn drill_post_endpoint(
     for properties in prop_combinations {
         let mut paylaod = std::collections::HashMap::new();
         for props in properties {
-            paylaod.insert(props.0, props.1.example.unwrap());
+            let pf = props.1;
+            paylaod.insert(
+                props.0,
+                pf.example.clone().unwrap_or(serde_json::Value::Null),
+            );
         }
 
         let s = serde_json::to_string(&paylaod).unwrap(); // TODO: handle the error
@@ -156,10 +160,28 @@ async fn drill_post_endpoint(
     Ok(responses)
 }
 
-fn property_for_schema(
-    s: &openapiv3::Schema,
-) -> std::collections::HashMap<String, openapiv3::ReferenceOr<Box<openapiv3::Schema>>> {
+fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<String, PropertyField> {
     let mut properties = std::collections::HashMap::new();
+
+    match &s.schema_data.example {
+        Some(e) => {
+            for (k, v) in e.as_object().unwrap() {
+                let pf = PropertyField {
+                    example: Some(v.clone()),
+                    nullable: false,
+                };
+
+                properties.insert(k.to_owned(), pf);
+            }
+
+            return properties;
+        }
+        None => {
+            tracing::warn!(
+                "No paylaod object example found in the schema, using example of single property"
+            );
+        }
+    }
 
     match &s.schema_kind {
         openapiv3::SchemaKind::Type(t) => match t {
@@ -171,7 +193,14 @@ fn property_for_schema(
             }
             openapiv3::Type::Object(o) => {
                 for (k, v) in &o.properties {
-                    properties.insert(k.to_owned(), v.to_owned());
+                    let v = v.as_item();
+                    let v = v.unwrap();
+                    let pf = PropertyField {
+                        example: v.schema_data.example.clone(),
+                        nullable: v.schema_data.nullable,
+                    };
+
+                    properties.insert(k.to_owned(), pf);
                 }
             }
             openapiv3::Type::Array(a) => {
@@ -250,7 +279,7 @@ fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
             None => continue,
         };
 
-        for (c, media_type) in &req.content {
+        for (_, media_type) in &req.content {
             let schema = match &media_type.schema {
                 Some(s) => s,
                 None => continue,
@@ -258,7 +287,7 @@ fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
 
             let reference = match schema {
                 openapiv3::ReferenceOr::Reference { reference } => reference.clone(),
-                openapiv3::ReferenceOr::Item(i) => "".to_owned(),
+                openapiv3::ReferenceOr::Item(_) => "".to_owned(),
             };
 
             if reference.is_empty() {
@@ -285,11 +314,8 @@ struct PropertyField {
 }
 
 fn create_combination_property(
-    properties: &mut std::collections::HashMap<
-        String,
-        openapiv3::ReferenceOr<Box<openapiv3::Schema>>,
-    >,
-) -> Vec<Vec<(&String, PropertyField)>> {
+    properties: &mut std::collections::HashMap<String, PropertyField>,
+) -> Vec<Vec<(&String, &PropertyField)>> {
     let total_combinations = (1 << properties.len()) - 1;
     let mut combination = vec![];
 
@@ -301,14 +327,7 @@ fn create_combination_property(
                 continue;
             }
 
-            let v = value.as_item();
-            let v = v.unwrap();
-            let pf = PropertyField {
-                example: v.schema_data.example.clone(),
-                nullable: v.schema_data.nullable,
-            };
-
-            comb.push((name, pf));
+            comb.push((name, value));
         }
 
         combination.push(comb);
@@ -320,6 +339,13 @@ fn create_combination_property(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// This is a fake test to make sure the test suite is setup with tracing.
+    #[test]
+    fn fake_test() {
+        tracing_subscriber::fmt::init();
+        assert!(true);
+    }
 
     #[test]
     fn scan_get() {
@@ -387,7 +413,57 @@ mod tests {
 
         assert_ne!(props.len(), 0);
 
+        assert!(props.contains_key("email"));
+        assert!(props.contains_key("password"));
+        assert!(props.contains_key("org"));
+
         let combs = create_combination_property(&mut props);
+        assert_eq!(combs.len(), 7);
+    }
+
+    #[test]
+    fn check_post_payload_full_example_obj() {
+        let s = std::include_str!("./testdata/post_login_obj_example.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let mut posts = collect_post(&openapi_schema.paths);
+        populate_payload(&mut posts, openapi_schema.components.unwrap());
+        let f = posts.first().unwrap();
+        assert_ne!(f.payload, None);
+
+        let s = f.payload.clone();
+        let s = s.unwrap();
+        let mut props = property_for_schema(&s);
+
+        assert_ne!(props.len(), 0);
+
+        assert!(props.contains_key("email"));
+        assert!(props.contains_key("password"));
+        assert!(props.contains_key("org"));
+
+        let combs: Vec<Vec<(&String, &PropertyField)>> = create_combination_property(&mut props);
+        assert_eq!(combs.len(), 7);
+    }
+
+    #[test]
+    fn check_post_payload_single_example_properties() {
+        let s = std::include_str!("./testdata/post_login_properties_example.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let mut posts = collect_post(&openapi_schema.paths);
+        populate_payload(&mut posts, openapi_schema.components.unwrap());
+        let f = posts.first().unwrap();
+        assert_ne!(f.payload, None);
+
+        let s = f.payload.clone();
+        let s = s.unwrap();
+        let mut props = property_for_schema(&s);
+
+        assert_ne!(props.len(), 0);
+
+        assert!(props.contains_key("email"));
+        assert!(props.contains_key("password"));
+        assert!(props.contains_key("org"));
+
+        let combs: Vec<Vec<(&String, &PropertyField)>> = create_combination_property(&mut props);
         assert_eq!(combs.len(), 7);
     }
 

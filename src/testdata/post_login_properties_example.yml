@@ -1,0 +1,89 @@
+openapi: 3.0.3
+info:
+  title: Fake OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: "1.0.0"
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: MIT
+    url: "https://www.fiuto.io/"
+
+tags:
+  - name: Authentication
+    description: Operations related to access platform
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/login:
+    post:
+      tags:
+        - Authentication
+      operationId: "login"
+      summary: User login
+      description: Allows users to login and receive a token and refresh token.
+      requestBody:
+        required: true
+        description: "payload for login"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful login response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Bad request, invalid input
+        "422":
+          description: Unprocessable entity, invalid input
+
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      description: "payload for login request"
+      properties:
+        email:
+          type: string
+          format: email
+          description: The user's email address.
+          example: "federico@fiuto.io"
+        org:
+          type: string
+          description: The user's organization.
+          example: "fiuto"
+        password:
+          type: string
+          format: password
+          description: The user's password.
+          example: "CiaoCiao94!%"
+      required:
+        - email
+        - org
+        - password
+
+    LoginResponse:
+      type: object
+      description: "data returned if login successful"
+      properties:
+        token:
+          type: string
+          description: JWT token for authentication.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+        refresh_token:
+          type: string
+          description: Token used to refresh authentication.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+      required:
+        - token
+        - refresh_token
+      example:
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+        refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
