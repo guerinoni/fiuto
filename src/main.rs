@@ -37,11 +37,6 @@ async fn main() {
 
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
-    // TODO: implement the server selection if any are present
-    // openapi_schema.servers.iter().for_each(|s| {
-    // tracing::info!("server: {:?}", s.url);
-    // });
-
     let components = openapi_schema.components.unwrap(); // FIXME: what if there are no components?
 
     let mut posts = collect_post(openapi_schema.paths.clone());
@@ -49,17 +44,17 @@ async fn main() {
 
     let gets = collect_gets(openapi_schema.paths);
 
-    let base_url = "http://127.0.0.1:8000"; // FIXME: make this configurable or take from the openapi file
+    let base_url = openapi_schema.servers.first().unwrap().url.clone();
 
     let mut all_results = vec![];
 
     for p in gets {
-        let result = exec_operation(p, base_url).await;
+        let result = exec_operation(p, &base_url).await;
         all_results.push(result);
     }
 
     for p in posts {
-        let result = exec_operation(p, base_url).await;
+        let result = exec_operation(p, &base_url).await;
         all_results.push(result);
     }
 
