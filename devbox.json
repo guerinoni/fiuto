@@ -5,7 +5,9 @@
     "rustup":   "latest",
     "darwin.apple_sdk.frameworks.SystemConfiguration": {
       "platforms": ["x86_64-darwin", "aarch64-darwin"]
-    }
+    },
+    "pkg-config":  "latest",
+    "openssl_3_3": "3.3.2"
   },
   "shell": {
     "init_hook": [
