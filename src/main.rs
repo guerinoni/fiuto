@@ -9,11 +9,10 @@ struct Args {
     base_url: Option<String>,
 }
 
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    
+
     let args = Args::parse();
 
     let s = match std::fs::read_to_string(args.openapi_file) {
@@ -42,11 +41,6 @@ async fn main() {
         }
     };
 
-    let mut posts = collect_post(&openapi_schema.paths);
-    populate_payload(&mut posts, components);
-
-    let gets = collect_gets(&openapi_schema.paths);
-
     let base_url = match openapi_schema.servers.first() {
         Some(s) => s.url.clone(),
         None => {
@@ -60,16 +54,26 @@ async fn main() {
         None => base_url,
     };
 
+    let mut posts = collect_post(&openapi_schema.paths);
+    populate_payload(&mut posts, components);
+
+    let gets = collect_gets(&openapi_schema.paths);
+
+    let mut operations = vec![];
+    operations.extend_from_slice(gets.as_slice());
+    operations.extend_from_slice(posts.as_slice());
+
     let mut all_results = vec![];
 
-    for p in gets {
+    for p in operations {
         let result = exec_operation(p, &base_url).await;
-        all_results.push(result);
-    }
-
-    for p in posts {
-        let result = exec_operation(p, &base_url).await;
-        all_results.push(result);
+        match result {
+            Ok(r) => all_results.push(r),
+            Err(e) => {
+                tracing::error!("Error executing operation: {:?}", e);
+                break;
+            }
+        }
     }
 
     for r in all_results {
@@ -78,7 +82,7 @@ async fn main() {
     }
 }
 
-async fn exec_operation(op: Op, base_url: &str) -> Vec<CallResult> {
+async fn exec_operation(op: Op, base_url: &str) -> Result<Vec<CallResult>, reqwest::Error> {
     match op.method.as_str() {
         "GET" => drill_get_endpoint(base_url, &op.path).await,
         "POST" => {
@@ -87,7 +91,10 @@ async fn exec_operation(op: Op, base_url: &str) -> Vec<CallResult> {
             let combs = create_combination_property(&mut props);
             drill_post_endpoint(base_url, &op.path, combs).await
         }
-        _ => vec![],
+        _ => {
+            tracing::warn!("Unsupported method: {}", op.method);
+            Ok(vec![])
+        }
     }
 }
 
@@ -98,26 +105,26 @@ struct CallResult {
     status_code: u16,
 }
 
-async fn drill_get_endpoint(base_url: &str, path: &str) -> Vec<CallResult> {
+async fn drill_get_endpoint(base_url: &str, path: &str) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
     let client = reqwest::Client::new();
     let req = client.request(reqwest::Method::GET, url.clone());
     let r = req.build().unwrap(); // TODO: handle the error
-    let resp = client.execute(r).await.unwrap(); // TODO: handle the error
+    let resp = client.execute(r).await?;
 
-    vec![CallResult {
+    Ok(vec![CallResult {
         payload: "".to_owned(),
         path: url.to_string(),
         status_code: resp.status().as_u16(),
-    }]
+    }])
 }
 
 async fn drill_post_endpoint(
     base_url: &str,
     path: &str,
     prop_combinations: Vec<Vec<(&String, PropertyField)>>,
-) -> Vec<CallResult> {
+) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
     let client = reqwest::Client::new();
@@ -137,7 +144,7 @@ async fn drill_post_endpoint(
             .body(s.clone())
             .header("Content-Type", "application/json"); // TODO: Make this configurable
         let r = req.build().unwrap(); // TODO: handle the error
-        let resp = client.execute(r).await.unwrap(); // TODO: handle the error
+        let resp = client.execute(r).await?;
 
         responses.push(CallResult {
             payload: s,
@@ -146,7 +153,7 @@ async fn drill_post_endpoint(
         });
     }
 
-    responses
+    Ok(responses)
 }
 
 fn property_for_schema(
@@ -183,6 +190,7 @@ fn property_for_schema(
     properties
 }
 
+#[derive(Clone)]
 struct Op {
     path: String,
     method: String,
@@ -345,6 +353,10 @@ mod tests {
         let p = gets.pop().unwrap();
         let result = exec_operation(p, &base_url).await;
 
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
+
         assert_eq!(result.len(), 1);
     }
 
@@ -400,6 +412,10 @@ mod tests {
 
         let p = posts.pop().unwrap();
         let result = exec_operation(p, &base_url).await;
+
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
 
         assert_eq!(result.len(), 7);
     }
