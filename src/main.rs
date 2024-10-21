@@ -1,25 +1,19 @@
-use std::vec;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    openapi_file: String,
+}
+
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    
+    let args = Args::parse();
 
-    tracing::info!("fiuto v0.1.0 starting...");
-
-    let file_path = match std::env::args().nth(1) {
-        Some(arg) => arg,
-        None => {
-            tracing::error!("No file path provided, exiting...");
-            std::process::exit(1);
-        }
-    };
-
-    if file_path == "--help" || file_path == "-h" || file_path == "help" {
-        println!("Usage: fiuto <openapi file path>");
-        std::process::exit(0);
-    }
-
-    let s = match std::fs::read_to_string(file_path) {
+    let s = match std::fs::read_to_string(args.openapi_file) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("Error reading file: {:?}", e);
@@ -37,14 +31,26 @@ async fn main() {
 
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
-    let components = openapi_schema.components.unwrap(); // FIXME: what if there are no components?
+    let components = match openapi_schema.components {
+        Some(c) => c,
+        None => {
+            tracing::error!("No components found in the openapi schema");
+            std::process::exit(1);
+        }
+    };
 
-    let mut posts = collect_post(openapi_schema.paths.clone());
+    let mut posts = collect_post(&openapi_schema.paths);
     populate_payload(&mut posts, components);
 
-    let gets = collect_gets(openapi_schema.paths);
+    let gets = collect_gets(&openapi_schema.paths);
 
-    let base_url = openapi_schema.servers.first().unwrap().url.clone();
+    let base_url = match openapi_schema.servers.first() {
+        Some(s) => s.url.clone(),
+        None => {
+            tracing::error!("No servers found in the openapi schema");
+            std::process::exit(1);
+        }
+    };
 
     let mut all_results = vec![];
 
@@ -176,7 +182,7 @@ struct Op {
     payload: Option<openapiv3::Schema>,
 }
 
-fn collect_gets(paths: openapiv3::Paths) -> Vec<Op> {
+fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
     paths
         .iter()
         .map(|p| {
@@ -196,7 +202,7 @@ fn collect_gets(paths: openapiv3::Paths) -> Vec<Op> {
         .collect()
 }
 
-fn collect_post(paths: openapiv3::Paths) -> Vec<Op> {
+fn collect_post(paths: &openapiv3::Paths) -> Vec<Op> {
     paths
         .iter()
         .map(|p| {
@@ -306,7 +312,7 @@ mod tests {
         assert!(openapi_schema.is_ok());
 
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-        let gets = collect_gets(openapi_schema.paths);
+        let gets = collect_gets(&openapi_schema.paths);
         assert_eq!(gets.len(), 1);
     }
 
@@ -326,7 +332,7 @@ mod tests {
 
         let s = std::include_str!("./testdata/get_info.yml");
         let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
-        let mut gets = collect_gets(openapi_schema.paths);
+        let mut gets = collect_gets(&openapi_schema.paths);
 
         let p = gets.pop().unwrap();
         let result = exec_operation(p, &base_url).await;
@@ -341,7 +347,7 @@ mod tests {
         assert!(openapi_schema.is_ok());
 
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-        let posts = collect_post(openapi_schema.paths);
+        let posts = collect_post(&openapi_schema.paths);
         assert_eq!(posts.len(), 1);
         assert_eq!(posts.first().unwrap().path, "/api/v1/login");
     }
@@ -350,7 +356,7 @@ mod tests {
     fn check_post_payload() {
         let s = std::include_str!("./testdata/post_login.yml");
         let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
-        let mut posts = collect_post(openapi_schema.paths);
+        let mut posts = collect_post(&openapi_schema.paths);
         populate_payload(&mut posts, openapi_schema.components.unwrap());
         let f = posts.first().unwrap();
         assert_ne!(f.payload, None);
@@ -381,7 +387,7 @@ mod tests {
 
         let s = std::include_str!("./testdata/post_login.yml");
         let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
-        let mut posts = collect_post(openapi_schema.paths);
+        let mut posts = collect_post(&openapi_schema.paths);
         populate_payload(&mut posts, openapi_schema.components.unwrap());
 
         let p = posts.pop().unwrap();
