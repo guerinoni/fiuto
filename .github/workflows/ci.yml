@@ -8,6 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install devbox
-        uses: jetify-com/devbox-install-action@master
+        uses: jetify-com/devbox-install-action@main
       - name: Test
         run: devbox run test
