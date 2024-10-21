@@ -4,6 +4,9 @@ use clap::Parser;
 #[command(version, about, long_about = None)]
 struct Args {
     openapi_file: String,
+
+    #[clap(long, short)]
+    base_url: Option<String>,
 }
 
 
@@ -50,6 +53,11 @@ async fn main() {
             tracing::error!("No servers found in the openapi schema");
             std::process::exit(1);
         }
+    };
+
+    let base_url = match args.base_url {
+        Some(b) => b,
+        None => base_url,
     };
 
     let mut all_results = vec![];
