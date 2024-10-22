@@ -66,11 +66,12 @@ async fn main() {
     let mut all_results = vec![];
 
     for p in operations {
-        let result = exec_operation(p, &base_url).await;
+        let result = exec_operation(p.clone(), &base_url).await;
         match result {
             Ok(r) => all_results.push(r),
             Err(e) => {
                 tracing::error!("Error executing operation: {:?}", e);
+                eprintln!("Error executing operation: {} {}: {}", p.method, p.path, e.to_string());
                 std::process::exit(1);
             }
         }
@@ -189,38 +190,35 @@ fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<Strin
         }
     }
 
-    match &s.schema_kind {
-        openapiv3::SchemaKind::Type(t) => match t {
-            openapiv3::Type::String(s) => {
-                println!("string: {:?}", s);
-            }
-            openapiv3::Type::Number(n) => {
-                println!("number: {:?}", n);
-            }
-            openapiv3::Type::Object(o) => {
-                for (k, v) in &o.properties {
-                    let v = v.as_item();
-                    let v = v.unwrap();
-                    let pf = PropertyField {
-                        example: v.schema_data.example.clone(),
-                        nullable: v.schema_data.nullable,
-                    };
+    if let openapiv3::SchemaKind::Type(t) = &s.schema_kind { match t {
+        openapiv3::Type::String(s) => {
+            println!("string: {:?}", s);
+        }
+        openapiv3::Type::Number(n) => {
+            println!("number: {:?}", n);
+        }
+        openapiv3::Type::Object(o) => {
+            for (k, v) in &o.properties {
+                let v = v.as_item();
+                let v = v.unwrap();
+                let pf = PropertyField {
+                    example: v.schema_data.example.clone(),
+                    nullable: v.schema_data.nullable,
+                };
 
-                    properties.insert(k.to_owned(), pf);
-                }
+                properties.insert(k.to_owned(), pf);
             }
-            openapiv3::Type::Array(a) => {
-                println!("array: {:?}", a);
-            }
-            openapiv3::Type::Boolean(b) => {
-                println!("boolean: {:?}", b);
-            }
-            openapiv3::Type::Integer(i) => {
-                println!("integer: {:?}", i);
-            }
-        },
-        _ => {}
-    }
+        }
+        openapiv3::Type::Array(a) => {
+            println!("array: {:?}", a);
+        }
+        openapiv3::Type::Boolean(b) => {
+            println!("boolean: {:?}", b);
+        }
+        openapiv3::Type::Integer(i) => {
+            println!("integer: {:?}", i);
+        }
+    } }
 
     properties
 }
@@ -264,10 +262,24 @@ fn collect_post(paths: &openapiv3::Paths) -> Vec<Op> {
             (pp, i.clone())
         })
         .filter(|p| p.1.post.is_some())
+        .map(|p| {
+            let post = p.1.post.unwrap();
+            let path = p.0.to_owned();
+            (path, post)
+        })
+        .filter(|p| p.1.request_body.is_some())
+        .filter(|p| {
+            let req_body = p.1.request_body.as_ref().unwrap();
+            let req_body = req_body.as_item().unwrap();
+            req_body
+                .content
+                .iter()
+                .any(|(k, _)| k == "application/json")
+        })
         .map(|p| Op {
             path: p.0,
             method: "POST".to_owned(),
-            operation: p.1.post.unwrap(),
+            operation: p.1,
             payload: None,
         })
         .collect()
@@ -402,6 +414,17 @@ mod tests {
         let posts = collect_post(&openapi_schema.paths);
         assert_eq!(posts.len(), 1);
         assert_eq!(posts.first().unwrap().path, "/api/v1/login");
+    }
+
+    #[test]
+    fn skip_non_json_content() {
+        let s = std::include_str!("./testdata/post_non_json_content.yml");
+        let openapi_schema = serde_yaml::from_str(s);
+        assert!(openapi_schema.is_ok());
+
+        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
+        let posts = collect_post(&openapi_schema.paths);
+        assert_eq!(posts.len(), 0);
     }
 
     #[test]
