@@ -77,7 +77,7 @@ async fn main() {
             Ok(r) => all_results.push(r),
             Err(e) => {
                 tracing::error!("Error executing operation: {:?}", e);
-                eprintln!("Error executing operation: {} {}: {}", p.method, p.path, e.to_string());
+                eprintln!("Error executing operation: {} {}: {}", p.method, p.path, e);
                 std::process::exit(1);
             }
         }
@@ -196,35 +196,37 @@ fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<Strin
         }
     }
 
-    if let openapiv3::SchemaKind::Type(t) = &s.schema_kind { match t {
-        openapiv3::Type::String(s) => {
-            println!("string: {:?}", s);
-        }
-        openapiv3::Type::Number(n) => {
-            println!("number: {:?}", n);
-        }
-        openapiv3::Type::Object(o) => {
-            for (k, v) in &o.properties {
-                let v = v.as_item();
-                let v = v.unwrap();
-                let pf = PropertyField {
-                    example: v.schema_data.example.clone(),
-                    nullable: v.schema_data.nullable,
-                };
+    if let openapiv3::SchemaKind::Type(t) = &s.schema_kind {
+        match t {
+            openapiv3::Type::String(s) => {
+                println!("string: {:?}", s);
+            }
+            openapiv3::Type::Number(n) => {
+                println!("number: {:?}", n);
+            }
+            openapiv3::Type::Object(o) => {
+                for (k, v) in &o.properties {
+                    let v = v.as_item();
+                    let v = v.unwrap();
+                    let pf = PropertyField {
+                        example: v.schema_data.example.clone(),
+                        nullable: v.schema_data.nullable,
+                    };
 
-                properties.insert(k.to_owned(), pf);
+                    properties.insert(k.to_owned(), pf);
+                }
+            }
+            openapiv3::Type::Array(a) => {
+                println!("array: {:?}", a);
+            }
+            openapiv3::Type::Boolean(b) => {
+                println!("boolean: {:?}", b);
+            }
+            openapiv3::Type::Integer(i) => {
+                println!("integer: {:?}", i);
             }
         }
-        openapiv3::Type::Array(a) => {
-            println!("array: {:?}", a);
-        }
-        openapiv3::Type::Boolean(b) => {
-            println!("boolean: {:?}", b);
-        }
-        openapiv3::Type::Integer(i) => {
-            println!("integer: {:?}", i);
-        }
-    } }
+    }
 
     properties
 }
@@ -269,6 +271,7 @@ fn collect_post(paths: &openapiv3::Paths) -> Vec<Op> {
             (pp, i.clone())
         })
         .filter(|p| p.1.post.is_some())
+        .filter(|p| !p.1.post.as_ref().unwrap().deprecated)
         .map(|p| {
             let post = p.1.post.unwrap();
             let path = p.0.to_owned();
@@ -381,6 +384,17 @@ mod tests {
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
         let gets = collect_gets(&openapi_schema.paths);
         assert_eq!(gets.len(), 0);
+    }
+
+    #[test]
+    fn skip_deprecated_post() {
+        let s = std::include_str!("./testdata/post_login_deprecated.yml");
+        let openapi_schema = serde_yaml::from_str(s);
+        assert!(openapi_schema.is_ok());
+
+        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
+        let posts = collect_post(&openapi_schema.paths);
+        assert_eq!(posts.len(), 0);
     }
 
     #[test]
