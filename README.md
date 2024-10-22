@@ -14,14 +14,14 @@ It is in a early stage phase.
 ## Usage
 
 ```zsh
-fiuto ./mySpec.yml
+fiuto ./openapi.yml
 ```
 
 This generates a result in json, maybe in future a UI can be built on top of this.
 
 If you want override (or set server base url) you can call 
 ```zsh
-fiuto --base-url 'http://127.0.0.1:8001' ./mySpec.yml
+fiuto --base-url 'http://127.0.0.1:8001' ./openapi.yml
 ```
 
 In case something is not working with URL, the tool stops at the first request.
