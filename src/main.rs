@@ -71,7 +71,7 @@ async fn main() {
             Ok(r) => all_results.push(r),
             Err(e) => {
                 tracing::error!("Error executing operation: {:?}", e);
-                break;
+                std::process::exit(1);
             }
         }
     }
