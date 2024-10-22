@@ -33,6 +33,7 @@ In case something is not working with URL, the tool stops at the first request.
 - [x] json result easy to parse
 - [x] support for full object example
 - [x] support example for every propries
+- [x] skip deprecated endpoints with `--skip-deprecated`
 
 ## Limitations
 
