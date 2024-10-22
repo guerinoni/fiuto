@@ -86,7 +86,13 @@ async fn exec_operation(op: Op, base_url: &str) -> Result<Vec<CallResult>, reqwe
     match op.method.as_str() {
         "GET" => drill_get_endpoint(base_url, &op.path).await,
         "POST" => {
-            let s = op.payload.unwrap(); // FIXME: what if there are no payload?
+            let s = match op.payload {
+                Some(s) => s,
+                None => {
+                    tracing::warn!("No payload found for POST {}", op.path);
+                    return Ok(vec![]);
+                }
+            };
             let mut props = property_for_schema(&s);
             let combs = create_combination_property(&mut props);
             drill_post_endpoint(base_url, &op.path, combs).await
@@ -291,7 +297,7 @@ fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
             };
 
             if reference.is_empty() {
-                tracing::warn!("reference is empty");
+                tracing::warn!("reference is empty for request {}", o.path);
                 continue;
             }
 
