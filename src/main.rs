@@ -3,10 +3,16 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// Path to the openapi schema file
     openapi_file: String,
 
+    /// Base URL to use for the requests
     #[clap(long, short)]
     base_url: Option<String>,
+
+    /// Skip deprecated endpoints
+    #[clap(long)]
+    skip_deprecated: bool,
 }
 
 #[tokio::main]
@@ -242,6 +248,7 @@ fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
             (pp, i.clone())
         })
         .filter(|p| p.1.get.is_some())
+        .filter(|p| !p.1.get.as_ref().unwrap().deprecated)
         .map(|p| Op {
             path: p.0,
             method: "GET".to_owned(),
@@ -363,6 +370,17 @@ mod tests {
     fn fake_test() {
         tracing_subscriber::fmt::init();
         assert!(true);
+    }
+
+    #[test]
+    fn skip_deprecated_get() {
+        let s = std::include_str!("./testdata/get_info_deprecated.yml");
+        let openapi_schema = serde_yaml::from_str(s);
+        assert!(openapi_schema.is_ok());
+
+        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
+        let gets = collect_gets(&openapi_schema.paths);
+        assert_eq!(gets.len(), 0);
     }
 
     #[test]
