@@ -50,3 +50,17 @@ In case something is not working with URL, the tool stops at the first request.
 - test `nullable` field
 - skip deprecated
 - support get with payload
+- support POST with format like 
+```
+requestBody:
+        required: true
+        description: Form containing OPML file
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+```
