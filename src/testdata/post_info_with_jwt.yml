@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: '1.0.0'
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: Proprietary
+    url: 'https://www.fiuto.io/'
+
+tags:
+  - name: Information
+    description: Endpoints that provide user or system-related information
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/org/info:
+    post:
+      tags:
+        - Information
+      operationId: "postInfo"
+      summary: Update address information
+      description: "Update the address information for the organization"
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: "payload for update info"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InfoRequest"
+      responses:
+        "200":
+          description: Successful insertion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Bad request, invalid input
+        "422":
+          description: Unprocessable entity, invalid input
+
+components:
+  schemas:
+    InfoRequest:
+      type: object
+      properties:
+        address:
+          type: string
+          example: "123 Main St"
+    
+    LoginResponse:
+      type: object
+      description: "data returned if login successful"
+      properties:
+        token:
+          type: string
+          description: JWT token for authentication.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+        refresh_token:
+          type: string
+          description: Token used to refresh authentication.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+      required:
+        - token
+        - refresh_token
+      example:
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+        refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o"
+
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

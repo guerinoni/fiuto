@@ -221,7 +221,13 @@ fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<Strin
             openapiv3::Type::Object(o) => {
                 for (k, v) in &o.properties {
                     let v = v.as_item();
-                    let v = v.unwrap();
+                    let v = match v {
+                        Some(v) => v,
+                        None => {
+                            tracing::warn!("No item found for property {}", k);
+                            continue;
+                        }
+                    };
                     let pf = PropertyField {
                         example: v.schema_data.example.clone(),
                         nullable: v.schema_data.nullable,
@@ -264,7 +270,14 @@ async fn exec_operation(
             };
             let mut props = property_for_schema(&s);
             let combs = create_combination_property(&mut props);
-            drill_post_endpoint(base_url, &op.path, combs).await
+            drill_post_endpoint(
+                base_url,
+                &op.path,
+                (jwt_name, jwt),
+                op.operation.security,
+                combs,
+            )
+            .await
         }
         _ => {
             tracing::warn!("Unsupported method: {}", op.method);
@@ -335,6 +348,8 @@ async fn drill_get_endpoint(
 async fn drill_post_endpoint(
     base_url: &str,
     path: &str,
+    (jwt_name, jwt): (Option<String>, Option<String>),
+    security: Option<Vec<openapiv3::SecurityRequirement>>,
     prop_combinations: Vec<Vec<(&String, &PropertyField)>>,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
@@ -355,10 +370,28 @@ async fn drill_post_endpoint(
 
         let s = serde_json::to_string(&paylaod).unwrap(); // TODO: handle the error
 
-        let req = client
-            .request(reqwest::Method::POST, url.clone()) // TODO: Make method configurable
+        let mut req = client
+            .request(reqwest::Method::POST, url.clone())
             .body(s.clone())
             .header("Content-Type", "application/json"); // TODO: Make this configurable
+
+        tracing::info!("jwt info: {:?} {:?}", jwt_name, jwt);
+
+        if let Some(ref s) = security {
+            if jwt.is_some() && jwt_name.is_some() {
+                for ss in s.iter() {
+                    for (k, _) in ss.iter() {
+                        let jwt_name = jwt_name.clone().unwrap();
+                        let jwt = jwt.clone().unwrap();
+
+                        if k == &jwt_name {
+                            req = req.header("Authorization", format!("Bearer {}", jwt));
+                        }
+                    }
+                }
+            }
+        }
+
         let r = req.build().unwrap(); // TODO: handle the error
         let resp = client.execute(r).await?;
 

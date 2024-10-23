@@ -9,6 +9,7 @@ async fn run_api() -> String {
         .route("/api/v1/org/info", axum::routing::get(info))
         .route("/api/v1/org/more/info", axum::routing::get(more_info))
         .route("/api/v1/org/login", axum::routing::post(login_handler))
+        .route("/api/v1/org/info",axum::routing::post(post_info))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -99,6 +100,16 @@ async fn info() -> axum::Json<&'static str> {
     axum::Json("Hello, World!")
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
+struct InfoRequest {
+    address: String,
+}
+
+async fn post_info(claims: Claims, axum::Json(payload): axum::Json<InfoRequest>,) -> axum::Json<String> {
+    tracing::info!("post info received token: {}", claims.token_received);
+    axum::Json(claims.token_received)
+}
+
 // this return the token populated during the request, this way we can use it for test checks.
 async fn more_info(claims: Claims) -> axum::Json<String> {
     axum::Json(claims.token_received)
@@ -152,7 +163,7 @@ async fn get_with_jwt() {
 
     let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
     let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
-    let token = Some("test_token".to_owned());
+    let token = Some("test_token_get_with_jwt".to_owned());
     let r = fiuto::do_it(openapi_schema, Some(url), token).await;
 
     assert!(r.is_ok());
@@ -161,4 +172,16 @@ async fn get_with_jwt() {
     assert_eq!(r.len(), 1);
 
     // TODO: Add more check, specially about the token, but we need responses more info, not just code.
+}
+
+#[tokio::test]
+async fn post_with_jwt(){
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let token = Some("test_token_post_with_jwt".to_owned());
+    let r = fiuto::do_it(openapi_schema, Some(url), token).await;
+
+    assert!(r.is_ok());
 }
