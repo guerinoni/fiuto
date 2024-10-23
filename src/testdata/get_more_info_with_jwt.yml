@@ -25,6 +25,8 @@ paths:
       operationId: getOrgInfo
       summary: Get Organization Information
       description: Returns general information about the organization, including HQ location details.
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Successful response containing organization information
@@ -61,3 +63,9 @@ components:
         country:
           type: string
           example: "USA"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
