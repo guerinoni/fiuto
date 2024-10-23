@@ -34,6 +34,7 @@ In case something is not working with URL, the tool stops at the first request.
 - [x] support for full object example
 - [x] support example for every propries
 - [x] skip deprecated endpoints with `--skip-deprecated`
+- [x] send request with a token using `--jwt <string>` (this allows to test endpoints behind an auth)
 
 ## Limitations
 
@@ -45,6 +46,8 @@ In case something is not working with URL, the tool stops at the first request.
 ## Idea
 
 - check responses
+- support for headers to inject
+- test combination of headers?
 - test different input other then examples provided
 - use the full example of the object instead examples for every field
 - inject token for request with auth (CLI parameter)
