@@ -49,8 +49,37 @@ async fn main() {
         }
     };
 
-    for r in all_results {
+    all_results.iter().for_each(|r| {
         let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
         println!("{}", string_results);
+    });
+
+    let mut codes = std::collections::HashMap::new();
+
+    for r in all_results {
+        for cr in r {
+            let counter = codes.entry(cr.status_code).or_insert(0);
+            let new_count = *counter + 1;
+            codes.insert(cr.status_code, new_count);
+        }
     }
+
+    let table = tabled::Table::new(
+        codes
+            .iter()
+            .map(|(k, v)| StatsResult {
+                status_code: *k,
+                count: *v,
+            })
+            .collect::<Vec<StatsResult>>(),
+    )
+    .to_string();
+
+    println!("{}", table);
+}
+
+#[derive(tabled::Tabled)]
+struct StatsResult {
+    status_code: u16,
+    count: u32,
 }

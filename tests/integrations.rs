@@ -9,7 +9,7 @@ async fn run_api() -> String {
         .route("/api/v1/org/info", axum::routing::get(info))
         .route("/api/v1/org/more/info", axum::routing::get(more_info))
         .route("/api/v1/org/login", axum::routing::post(login_handler))
-        .route("/api/v1/org/info",axum::routing::post(post_info))
+        .route("/api/v1/org/info", axum::routing::post(post_info))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -105,7 +105,10 @@ struct InfoRequest {
     address: String,
 }
 
-async fn post_info(claims: Claims, axum::Json(payload): axum::Json<InfoRequest>,) -> axum::Json<String> {
+async fn post_info(
+    claims: Claims,
+    axum::Json(payload): axum::Json<InfoRequest>,
+) -> axum::Json<String> {
     tracing::info!("post info received token: {}", claims.token_received);
     axum::Json(claims.token_received)
 }
@@ -175,7 +178,7 @@ async fn get_with_jwt() {
 }
 
 #[tokio::test]
-async fn post_with_jwt(){
+async fn post_with_jwt() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");

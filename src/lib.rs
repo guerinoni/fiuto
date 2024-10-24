@@ -2,7 +2,7 @@
 pub struct CallResult {
     payload: String,
     path: String,
-    status_code: u16,
+    pub status_code: u16,
 }
 
 pub async fn do_it(
@@ -563,23 +563,44 @@ mod tests {
 
     #[test]
     fn check_combinations() {
-        { // empty generate zero combinations
-        let mut hm = std::collections::hash_map::HashMap::new();
-        let comb = create_combination_property(&mut hm);
-        assert_eq!(comb.len(), 0);
-        }
-        { // single property generate 2 combination, [<property>, <empty>]
+        {
+            // empty generate zero combinations
             let mut hm = std::collections::hash_map::HashMap::new();
-            hm.insert("one".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
+            let comb = create_combination_property(&mut hm);
+            assert_eq!(comb.len(), 0);
+        }
+        {
+            // single property generate 2 combination, [<property>, <empty>]
+            let mut hm = std::collections::hash_map::HashMap::new();
+            hm.insert(
+                "one".to_string(),
+                PropertyField {
+                    example: Some(serde_json::Value::Bool(true)),
+                    nullable: false,
+                },
+            );
             let comb = create_combination_property(&mut hm);
             assert_eq!(comb.len(), 2);
             assert_eq!(comb.first().unwrap().len(), 0);
             assert_eq!(comb.last().unwrap().len(), 1);
         }
-        { // 2 properties generate [<p1,p2>, <p1>, <p2>, <empty>]
+        {
+            // 2 properties generate [<p1,p2>, <p1>, <p2>, <empty>]
             let mut hm = std::collections::hash_map::HashMap::new();
-            hm.insert("one".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
-            hm.insert("two".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
+            hm.insert(
+                "one".to_string(),
+                PropertyField {
+                    example: Some(serde_json::Value::Bool(true)),
+                    nullable: false,
+                },
+            );
+            hm.insert(
+                "two".to_string(),
+                PropertyField {
+                    example: Some(serde_json::Value::Bool(true)),
+                    nullable: false,
+                },
+            );
             let mut comb = create_combination_property(&mut hm);
             assert_eq!(comb.len(), 4);
             let fourth = comb.pop().unwrap();
