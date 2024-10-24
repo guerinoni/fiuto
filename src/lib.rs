@@ -292,6 +292,11 @@ fn create_combination_property(
     let total_combinations = (1 << properties.len()) - 1;
     let mut combination = vec![];
 
+    if total_combinations > 0 {
+        // generate empty combination
+        combination.push(vec![]);
+    }
+
     for mask in 1..=total_combinations {
         let mut comb = vec![];
 
@@ -459,7 +464,7 @@ mod tests {
         assert!(props.contains_key("org"));
 
         let combs = create_combination_property(&mut props);
-        assert_eq!(combs.len(), 7);
+        assert_eq!(combs.len(), 8);
     }
 
     #[test]
@@ -482,7 +487,7 @@ mod tests {
         assert!(props.contains_key("org"));
 
         let combs: Vec<Vec<(&String, &PropertyField)>> = create_combination_property(&mut props);
-        assert_eq!(combs.len(), 7);
+        assert_eq!(combs.len(), 8);
     }
 
     #[test]
@@ -505,7 +510,7 @@ mod tests {
         assert!(props.contains_key("org"));
 
         let combs: Vec<Vec<(&String, &PropertyField)>> = create_combination_property(&mut props);
-        assert_eq!(combs.len(), 7);
+        assert_eq!(combs.len(), 8);
     }
 
     #[test]
@@ -553,6 +558,38 @@ mod tests {
             let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
             let posts = collect_post(&openapi_schema.paths);
             assert_eq!(posts.len(), 0);
+        }
+    }
+
+    #[test]
+    fn check_combinations() {
+        { // empty generate zero combinations
+        let mut hm = std::collections::hash_map::HashMap::new();
+        let comb = create_combination_property(&mut hm);
+        assert_eq!(comb.len(), 0);
+        }
+        { // single property generate 2 combination, [<property>, <empty>]
+            let mut hm = std::collections::hash_map::HashMap::new();
+            hm.insert("one".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
+            let comb = create_combination_property(&mut hm);
+            assert_eq!(comb.len(), 2);
+            assert_eq!(comb.first().unwrap().len(), 0);
+            assert_eq!(comb.last().unwrap().len(), 1);
+        }
+        { // 2 properties generate [<p1,p2>, <p1>, <p2>, <empty>]
+            let mut hm = std::collections::hash_map::HashMap::new();
+            hm.insert("one".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
+            hm.insert("two".to_string(), PropertyField { example: Some(serde_json::Value::Bool(true)), nullable: false });
+            let mut comb = create_combination_property(&mut hm);
+            assert_eq!(comb.len(), 4);
+            let fourth = comb.pop().unwrap();
+            assert_eq!(fourth.len(), 2); // p1, p2
+            let third = comb.pop().unwrap();
+            assert_eq!(third.len(), 1); // p2
+            let second = comb.pop().unwrap();
+            assert_eq!(second.len(), 1); // p1
+            let first = comb.pop().unwrap();
+            assert_eq!(first.len(), 0); // empty
         }
     }
 }

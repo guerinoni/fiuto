@@ -152,7 +152,7 @@ async fn post_login() {
     assert_eq!(r.len(), 1); // 1 endpoint
 
     let combinations = r.get(0).unwrap();
-    assert_eq!(combinations.len(), 7); // 7 combinations
+    assert_eq!(combinations.len(), 8); // 8 combinations
 
     // TODO: add more checks about code returned/expected
 }
