@@ -1,3 +1,4 @@
+mod collector;
 #[derive(Debug, serde::Serialize)]
 pub struct CallResult {
     payload: String,
@@ -35,10 +36,8 @@ pub async fn do_it(
 
     let jwt_name = get_jwt_token(&components);
 
-    let mut posts = collect_post(&openapi_schema.paths);
-    populate_payload(&mut posts, components);
-
-    let gets = collect_gets(&openapi_schema.paths);
+    let posts = collector::collect_post(&openapi_schema.paths, &components);
+    let gets = collector::collect_gets(&openapi_schema.paths);
 
     let mut operations = vec![];
     operations.extend_from_slice(gets.as_slice());
@@ -75,70 +74,6 @@ fn get_jwt_token(components: &openapiv3::Components) -> Option<String> {
             } if scheme.to_lowercase() == "bearer" => Some(k),
             _ => None,
         })
-}
-
-fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
-    paths
-        .iter()
-        .map(|p| {
-            let pp = p.0.to_owned();
-            let i = p.1.to_owned();
-            let i = i.as_item();
-            let i = i.unwrap();
-            (pp, i.clone())
-        })
-        .filter(|p| p.1.get.is_some())
-        .filter(|p| !p.1.get.as_ref().unwrap().deprecated)
-        .map(|p| Op {
-            path: p.0,
-            method: "GET".to_owned(),
-            operation: p.1.get.unwrap(),
-            payload: None,
-        })
-        .collect()
-}
-
-fn collect_post(paths: &openapiv3::Paths) -> Vec<Op> {
-    paths
-        .iter()
-        .map(|p| {
-            let pp = p.0.to_owned();
-            let i = p.1.to_owned();
-            let i = i.as_item();
-            let i = i.unwrap();
-            (pp, i.clone())
-        })
-        .filter(|p| p.1.post.is_some())
-        .filter(|p| !p.1.post.as_ref().unwrap().deprecated)
-        .map(|p| {
-            let post = p.1.post.unwrap();
-            let path = p.0.to_owned();
-            (path, post)
-        })
-        .filter(|p| p.1.request_body.is_some())
-        .filter(|p| {
-            let req_body = p.1.request_body.as_ref().unwrap();
-            let req_body = req_body.as_item().unwrap();
-            req_body
-                .content
-                .iter()
-                .any(|(k, _)| k == "application/json")
-        })
-        .map(|p| Op {
-            path: p.0,
-            method: "POST".to_owned(),
-            operation: p.1,
-            payload: None,
-        })
-        .collect()
-}
-
-#[derive(Clone)]
-struct Op {
-    path: String,
-    method: String,
-    operation: openapiv3::Operation,
-    payload: Option<openapiv3::Schema>,
 }
 
 fn populate_payload(op: &mut Vec<Op>, components: openapiv3::Components) {
@@ -199,7 +134,6 @@ fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<Strin
                 };
 
                 properties.insert(k.to_owned(), pf);
-            }
 
             return properties;
         }
@@ -252,7 +186,7 @@ fn property_for_schema(s: &openapiv3::Schema) -> std::collections::HashMap<Strin
 }
 
 async fn exec_operation(
-    op: Op,
+    op: collector::Op,
     base_url: &str,
     (jwt_name, jwt): (Option<String>, Option<String>),
 ) -> Result<Vec<CallResult>, reqwest::Error> {
