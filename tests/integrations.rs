@@ -10,6 +10,7 @@ async fn run_api() -> String {
         .route("/api/v1/org/more/info", axum::routing::get(more_info))
         .route("/api/v1/org/login", axum::routing::post(login_handler))
         .route("/api/v1/org/info", axum::routing::post(post_info))
+        .route("/api/v1/org/hq", axum::routing::post(post_hq))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -110,7 +111,27 @@ async fn post_info(
     axum::Json(payload): axum::Json<InfoRequest>,
 ) -> axum::Json<String> {
     tracing::info!("post info received token: {}", claims.token_received);
+    let _ = payload;
     axum::Json(claims.token_received)
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
+struct Info {
+    hq: HQ,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
+struct HQ {
+    address: String,
+    postal_code: String,
+    city: String,
+    country: String,
+    state_region: String,
+}
+
+async fn post_hq(axum::Json(payload): axum::Json<Info>) -> axum::Json<String> {
+    tracing::info!("post hq received: {:?}", payload);
+    axum::Json("ok".to_string())
 }
 
 // this return the token populated during the request, this way we can use it for test checks.
@@ -155,7 +176,7 @@ async fn post_login() {
     assert_eq!(r.len(), 1); // 1 endpoint
 
     let combinations = r.get(0).unwrap();
-    assert_eq!(combinations.len(), 8); // 8 combinations
+    assert_eq!(combinations.len(), 8);
 
     // TODO: add more checks about code returned/expected
 }
@@ -185,6 +206,17 @@ async fn post_with_jwt() {
     let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
     let token = Some("test_token_post_with_jwt".to_owned());
     let r = fiuto::do_it(openapi_schema, Some(url), token).await;
+
+    assert!(r.is_ok());
+}
+
+#[tokio::test]
+async fn post_with_nested_property_body() {
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/post_info_nested_property.yml");
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
 
     assert!(r.is_ok());
 }
