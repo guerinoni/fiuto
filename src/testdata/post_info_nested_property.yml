@@ -1,0 +1,86 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: '1.0.0'
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: Proprietary
+    url: 'https://www.fiuto.io/'
+
+tags:
+  - name: Information
+    description: Endpoints that provide user or system-related information
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/org/hq:
+    post:
+      tags:
+        - Information
+      operationId: getOrgInfo
+      summary: Get Organization Information
+      description: Returns general information about the organization, including HQ location details.
+      requestBody:
+        description: Organization information payload
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgInfoPayload'
+      responses:
+        '201':
+          description: Organization information successfully updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: org info updated
+                  code:
+                    type: integer
+                    example: 201
+        '400':
+          description: Invalid input
+
+components:
+  schemas:
+    OrgInfoPayload:
+      type: object
+      description: 'Data of the organization'
+      required:
+        - hq
+      properties:
+        hq:
+          $ref: '#/components/schemas/HQ'
+    HQ:
+      type: object
+      description: 'Headquarters information'
+      required:
+        - address
+        - postal_code
+        - city
+        - state_region
+        - country
+      properties:
+        address:
+          type: string
+          example: "123 Main Street"
+        postal_code:
+          type: string
+          example: "12345"
+        city:
+          type: string
+          example: "New York"
+        state_region:
+          type: string
+          example: "NY"
+        country:
+          type: string
+          example: "USA"
