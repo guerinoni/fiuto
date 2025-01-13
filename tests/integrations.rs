@@ -63,7 +63,6 @@ impl axum::response::IntoResponse for AuthError {
     }
 }
 
-#[async_trait::async_trait]
 impl<S> axum::extract::FromRequestParts<S> for Claims
 where
     S: Send + Sync,
@@ -111,7 +110,7 @@ async fn post_info(
     axum::Json(payload): axum::Json<InfoRequest>,
 ) -> axum::Json<String> {
     tracing::info!("post info received token: {}", claims.token_received);
-    let _ = payload;
+    let _= payload;
     axum::Json(claims.token_received)
 }
 
