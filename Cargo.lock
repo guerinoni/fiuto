@@ -1234,21 +1234,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-<<<<<<< HEAD
-version = "0.23.18"
-||||||| parent of bd8d606 (Bump tablet pkg)
-version = "0.23.15"
-=======
 version = "0.23.21"
->>>>>>> bd8d606 (Bump tablet pkg)
 source = "registry+https://github.com/rust-lang/crates.io-index"
-<<<<<<< HEAD
-checksum = "9c9cc1d47e243d655ace55ed38201c19ae02c148ae56412ab8750e8f0166ab7f"
-||||||| parent of bd8d606 (Bump tablet pkg)
-checksum = "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
-=======
 checksum = "8f287924602bf649d949c63dc8ac8b235fa5387d394020705b80c4eb597ce5b8"
->>>>>>> bd8d606 (Bump tablet pkg)
 dependencies = [
  "once_cell",
  "rustls-pki-types",
