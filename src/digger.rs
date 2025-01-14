@@ -11,7 +11,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(name: &str, value: serde_json::Value) -> std::rc::Rc<std::cell::RefCell<Self>> {
-        std::rc::Rc::new(std::cell::RefCell::new(Node {
+        std::rc::Rc::new(std::cell::RefCell::new(Self {
             name: name.to_string(),
             value,
             parent: None,
@@ -21,8 +21,8 @@ impl Node {
 
     /// Add a child node to the current node.
     fn add_child(
-        parent: &std::rc::Rc<std::cell::RefCell<Node>>,
-        child: std::rc::Rc<std::cell::RefCell<Node>>,
+        parent: &std::rc::Rc<std::cell::RefCell<Self>>,
+        child: std::rc::Rc<std::cell::RefCell<Self>>,
     ) {
         child.borrow_mut().parent = Some(std::rc::Rc::downgrade(parent));
         parent.borrow_mut().children.push(child);
@@ -40,7 +40,7 @@ impl Digger {
     pub fn new() -> Self {
         let root = Node::new("root", serde_json::Value::Null);
 
-        Digger {
+        Self {
             root: std::rc::Rc::clone(&root),
             current: root,
         }
@@ -64,32 +64,27 @@ impl Digger {
         self.current = parent;
     }
 
-    pub fn dig(&mut self, schema: openapiv3::Schema, components: &openapiv3::Components) -> Result<(), String> {
-        let t = match schema.schema_kind {
-            openapiv3::SchemaKind::Type(t) => t,
-            _ => {
-                tracing::warn!("schema kind not handled");
-                return Err("schema kind not handled".to_owned());
-            }
+    pub fn dig(
+        &mut self,
+        schema: openapiv3::Schema,
+        components: &openapiv3::Components,
+    ) -> Result<(), String> {
+        let openapiv3::SchemaKind::Type(t) = schema.schema_kind else {
+            tracing::warn!("Unsupported schema kind: {:?}", schema.schema_kind);
+            return Err("Unsupported schema kind".to_owned());
         };
 
-        let obj = match t {
-            openapiv3::Type::Object(o) => o,
-            _ => {
-                tracing::warn!("Unsupported type: {:?}", t);
-                return Err("Unsupported type".to_owned());
-            }
+        let openapiv3::Type::Object(obj) = t else {
+            tracing::warn!("Unsupported type: {:?}", t);
+            return Err("Unsupported type".to_owned());
         };
 
         for (name, p) in obj.properties {
             match p {
                 openapiv3::ReferenceOr::Item(item) => {
-                    let v = match item.schema_data.example {
-                        Some(e) => e,
-                        None => {
-                            tracing::warn!("No example found in the schema data {}", name);
-                            continue;
-                        }
+                    let Some(v) = item.schema_data.example else {
+                        let msg = format!("No example found for property: {name}");
+                        return Err(msg);
                     };
 
                     let n = Node::new(&name, v);
@@ -98,11 +93,11 @@ impl Digger {
                     self.current.borrow_mut().children.push(n);
                 }
                 openapiv3::ReferenceOr::Reference { reference } => {
-                    let (_, schema) = reference_to_schema_and_name(reference, &components)?;
-                    
+                    let (_, schema) = reference_to_schema_and_name(&reference, components)?;
+
                     self.add_child_and_enter(&name);
 
-                    self.dig(schema, &components)?;
+                    self.dig(schema, components)?;
 
                     self.exit_one_level();
                 }
@@ -115,16 +110,13 @@ impl Digger {
 
 /// It converts a reference from full name to a tuple with schema name and schema.
 fn reference_to_schema_and_name(
-    reference: String,
+    reference: &str,
     components: &openapiv3::Components,
 ) -> Result<(String, openapiv3::Schema), String> {
     let name = reference.trim_start_matches("#/components/schemas/");
-    let schema = match components.schemas.get(name) {
-        Some(s) => s,
-        None => {
-            let msg = format!("No schema found for reference: {}", reference);
-            return Err(msg);
-        }
+    let Some(schema) = components.schemas.get(name) else {
+        let msg = format!("No schema found for reference: {reference}");
+        return Err(msg);
     };
 
     let s = schema.as_item();
@@ -208,7 +200,7 @@ mod tests {
         let s = s.unwrap();
 
         let mut digger = Digger::new();
-        let result = digger.dig(s,&components);
+        let result = digger.dig(s, &components);
         assert!(result.is_ok());
 
         // check the tree generated from the schema
@@ -254,7 +246,7 @@ mod tests {
         let s = s.unwrap();
 
         let mut digger = Digger::new();
-        let result = digger.dig(s,&components);
+        let result = digger.dig(s, &components);
         assert!(result.is_ok());
 
         let root = digger.root.borrow();

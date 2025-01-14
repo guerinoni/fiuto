@@ -1,6 +1,5 @@
-
 pub fn do_it(
-    point: std::rc::Rc<std::cell::RefCell<crate::digger::Node>>,
+    point: &std::rc::Rc<std::cell::RefCell<crate::digger::Node>>,
 ) -> Vec<std::collections::HashMap<String, serde_json::Value>> {
     let mut properties = vec![];
 
@@ -13,7 +12,7 @@ pub fn do_it(
         properties.push((n.name.clone(), n.value.clone()));
 
         if !n.children.is_empty() {
-            let m = do_it(std::rc::Rc::clone(c));
+            let m = do_it(c);
             sub_properties.insert(c.borrow().name.clone(), m);
             continue;
         }
@@ -52,7 +51,7 @@ pub fn do_it(
                 .map(|variant| serde_json::to_value(variant).unwrap())
                 .for_each(|vv| {
                     let mut h = c.clone();
-                    h.insert(k.clone(), vv.clone());
+                    h.insert(k.clone(), vv);
                     to_push.push(h);
                 });
         }
@@ -74,7 +73,7 @@ mod tests {
         // - org
         // - password
         let root = crate::digger::load_flat_level();
-        let c = crate::shuffler::do_it(root);
+        let c = crate::shuffler::do_it(&root);
 
         println!("{:#?}", c);
 
@@ -113,7 +112,7 @@ mod tests {
         // - hq -> address, postal_code, city, state_region, country
 
         let root = crate::digger::load_nested();
-        let c = crate::shuffler::do_it(root);
+        let c = crate::shuffler::do_it(&root);
 
         println!("{:#?}", c);
 
@@ -304,7 +303,7 @@ mod tests {
         // - hq -> address, postal_code, city, state_region, country
 
         let root = crate::digger::load_nested_2();
-        let c = crate::shuffler::do_it(root);
+        let c = crate::shuffler::do_it(&root);
 
         println!("{:#?} - {}", c, c.len());
 
