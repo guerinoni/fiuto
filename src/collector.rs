@@ -1,4 +1,4 @@
-/// Op is the struct that represents an operation in the OpenAPI spec.
+/// Op is the struct that represents an operation in the `OpenAPI` spec.
 #[derive(Clone)]
 pub struct Op {
     pub path: String,
@@ -42,7 +42,7 @@ pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components
         .filter(|p| !p.1.post.as_ref().unwrap().deprecated)
         .map(|p| {
             let post = p.1.post.unwrap();
-            let path = p.0.to_owned();
+            let path = p.0;
             (path, post)
         })
         .filter(|p| p.1.request_body.is_some())
@@ -69,25 +69,20 @@ pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components
 
 fn populate_payload(op: &mut Vec<Op>, components: &openapiv3::Components) {
     for o in op {
-        let req = match &o.operation.request_body {
-            Some(r) => r,
-            None => continue,
+        let Some(req) = &o.operation.request_body else {
+            continue;
         };
 
-        let req = match req.as_item() {
-            Some(r) => r,
-            None => continue,
-        };
+        let Some(req) = req.as_item() else { continue };
 
         for (_, media_type) in &req.content {
-            let schema = match &media_type.schema {
-                Some(s) => s,
-                None => continue,
+            let Some(schema) = &media_type.schema else {
+                continue;
             };
 
             let reference = match schema {
                 openapiv3::ReferenceOr::Reference { reference } => reference.clone(),
-                openapiv3::ReferenceOr::Item(_) => "".to_owned(),
+                openapiv3::ReferenceOr::Item(_) => String::new(),
             };
 
             if reference.is_empty() {
@@ -96,9 +91,8 @@ fn populate_payload(op: &mut Vec<Op>, components: &openapiv3::Components) {
             }
 
             let reference = reference.trim_start_matches("#/components/schemas/");
-            let schema = match components.schemas.get(reference) {
-                Some(s) => s,
-                None => continue,
+            let Some(schema) = components.schemas.get(reference) else {
+                continue;
             };
 
             let ss = schema.as_item();

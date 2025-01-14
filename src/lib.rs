@@ -9,6 +9,9 @@ pub struct CallResult {
     pub status_code: u16,
 }
 
+/// Execute all operations in the openapi schema
+///
+/// # Errors
 pub async fn do_it(
     openapi_schema: openapiv3::OpenAPI,
     url: Option<String>,
@@ -16,27 +19,23 @@ pub async fn do_it(
 ) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
-    let components = match openapi_schema.components {
-        Some(c) => c,
-        None => {
+    let components = openapi_schema.components.map_or_else(
+        || {
             tracing::error!("No components found in the openapi schema");
             std::process::exit(1);
-        }
-    };
+        },
+        |c| c,
+    );
 
-    let base_url = match openapi_schema.servers.first() {
-        Some(s) => s.url.clone(),
-        None => {
+    let base_url = openapi_schema.servers.first().map_or_else(
+        || {
             tracing::error!("No servers found in the openapi schema");
             std::process::exit(1);
-        }
-    };
+        },
+        |s| s.url.clone(),
+    );
 
-    let base_url = match url {
-        Some(b) => b,
-        None => base_url,
-    };
-
+    let base_url = url.map_or(base_url, |b| b);
     let jwt_name = get_jwt_token(&components);
 
     let posts = collector::collect_post(&openapi_schema.paths, &components);
@@ -96,12 +95,9 @@ async fn exec_operation(
             drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), op.operation.security).await
         }
         "POST" => {
-            let s = match op.payload {
-                Some(s) => s,
-                None => {
-                    tracing::warn!("No payload found for POST {}", op.path);
-                    return Ok(vec![]);
-                }
+            let Some(s) = op.payload else {
+                tracing::warn!("No payload found for POST {}", op.path);
+                return Ok(vec![]);
             };
 
             drill_post_endpoint(
@@ -134,13 +130,13 @@ async fn drill_get_endpoint(
 
     if let Some(s) = security {
         if jwt.is_some() && jwt_name.is_some() {
-            for ss in s.iter() {
-                for (k, _) in ss.iter() {
+            for ss in s {
+                for (k, _) in ss {
                     let jwt_name = jwt_name.clone().unwrap();
                     let jwt = jwt.clone().unwrap();
 
-                    if k == &jwt_name {
-                        req = req.header("Authorization", format!("Bearer {}", jwt));
+                    if k == jwt_name {
+                        req = req.header("Authorization", format!("Bearer {jwt}"));
                     }
                 }
             }
@@ -151,7 +147,7 @@ async fn drill_get_endpoint(
     let resp = client.execute(r).await?;
 
     Ok(vec![CallResult {
-        payload: "".to_owned(),
+        payload: String::new(),
         path: url.to_string(),
         status_code: resp.status().as_u16(),
     }])
@@ -171,8 +167,8 @@ async fn drill_post_endpoint(
 
     let mut responses = vec![];
 
-    let mut digger = digger::Digger::new(components.clone());
-    let root = digger.dig(payload);
+    let mut digger = digger::Digger::new();
+    let root = digger.dig(payload, components);
     if let Err(e) = root {
         tracing::error!("Error digging the payload: {:?}", e);
         return Ok(vec![]);
@@ -195,13 +191,13 @@ async fn drill_post_endpoint(
 
         if let Some(ref s) = security {
             if jwt.is_some() && jwt_name.is_some() {
-                for ss in s.iter() {
-                    for (k, _) in ss.iter() {
+                for ss in s {
+                    for (k, _) in ss {
                         let jwt_name = jwt_name.clone().unwrap();
                         let jwt = jwt.clone().unwrap();
 
                         if k == &jwt_name {
-                            req = req.header("Authorization", format!("Bearer {}", jwt));
+                            req = req.header("Authorization", format!("Bearer {jwt}"));
                         }
                     }
                 }

@@ -110,7 +110,7 @@ async fn post_info(
     axum::Json(payload): axum::Json<InfoRequest>,
 ) -> axum::Json<String> {
     tracing::info!("post info received token: {}", claims.token_received);
-    let _= payload;
+    let _ = payload;
     axum::Json(claims.token_received)
 }
 

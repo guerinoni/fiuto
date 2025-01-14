@@ -32,17 +32,15 @@ impl Node {
 /// Diggere is a struct that holds the current state while populating the tree going through
 /// the JSON data of all components.
 pub struct Digger {
-    components: openapiv3::Components,
     pub root: std::rc::Rc<std::cell::RefCell<Node>>,
     current: std::rc::Rc<std::cell::RefCell<Node>>,
 }
 
 impl Digger {
-    pub fn new(components: openapiv3::Components) -> Self {
+    pub fn new() -> Self {
         let root = Node::new("root", serde_json::Value::Null);
 
         Digger {
-            components,
             root: std::rc::Rc::clone(&root),
             current: root,
         }
@@ -66,7 +64,7 @@ impl Digger {
         self.current = parent;
     }
 
-    pub fn dig(&mut self, schema: openapiv3::Schema) -> Result<(), String> {
+    pub fn dig(&mut self, schema: openapiv3::Schema, components: &openapiv3::Components) -> Result<(), String> {
         let t = match schema.schema_kind {
             openapiv3::SchemaKind::Type(t) => t,
             _ => {
@@ -100,11 +98,11 @@ impl Digger {
                     self.current.borrow_mut().children.push(n);
                 }
                 openapiv3::ReferenceOr::Reference { reference } => {
-                    let (_, schema) = reference_to_schema_and_name(reference, &self.components)?;
-
+                    let (_, schema) = reference_to_schema_and_name(reference, &components)?;
+                    
                     self.add_child_and_enter(&name);
 
-                    self.dig(schema)?;
+                    self.dig(schema, &components)?;
 
                     self.exit_one_level();
                 }
@@ -143,12 +141,12 @@ pub fn load_flat_level() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
 
-    let mut digger = Digger::new(components);
+    let mut digger = Digger::new();
     let f = posts.first().unwrap();
     let s = f.payload.clone();
     let s = s.unwrap();
 
-    let result = digger.dig(s);
+    let result = digger.dig(s, &components);
     assert!(result.is_ok());
 
     digger.root
@@ -162,12 +160,12 @@ pub fn load_nested() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
 
-    let mut digger = Digger::new(components);
+    let mut digger = Digger::new();
     let f = posts.first().unwrap();
     let s = f.payload.clone();
     let s = s.unwrap();
 
-    let result = digger.dig(s);
+    let result = digger.dig(s, &components);
     assert!(result.is_ok());
 
     digger.root
@@ -181,12 +179,12 @@ pub fn load_nested_2() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
 
-    let mut digger = Digger::new(components);
+    let mut digger = Digger::new();
     let f = posts.first().unwrap();
     let s = f.payload.clone();
     let s = s.unwrap();
 
-    let result = digger.dig(s);
+    let result = digger.dig(s, &components);
     assert!(result.is_ok());
 
     digger.root
@@ -209,8 +207,8 @@ mod tests {
         let s = f.payload.clone();
         let s = s.unwrap();
 
-        let mut digger = Digger::new(components);
-        let result = digger.dig(s);
+        let mut digger = Digger::new();
+        let result = digger.dig(s,&components);
         assert!(result.is_ok());
 
         // check the tree generated from the schema
@@ -255,8 +253,8 @@ mod tests {
         let s = f.payload.clone();
         let s = s.unwrap();
 
-        let mut digger = Digger::new(components);
-        let result = digger.dig(s);
+        let mut digger = Digger::new();
+        let result = digger.dig(s,&components);
         assert!(result.is_ok());
 
         let root = digger.root.borrow();

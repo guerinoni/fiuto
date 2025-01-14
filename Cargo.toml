@@ -19,3 +19,12 @@ tracing-subscriber = "0.3.18"
 axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
 async-trait = "0.1"
+
+[lints.clippy]
+complexity = "warn"
+correctness = "warn"
+nursery = "warn"
+pedantic = "warn"
+perf = "warn"
+style = "warn"
+suspicious = "warn"

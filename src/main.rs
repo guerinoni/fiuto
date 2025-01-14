@@ -49,14 +49,14 @@ async fn main() {
         }
     };
 
-    all_results.iter().for_each(|r| {
+    for r in &all_results {
         let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
-        println!("{}", string_results);
-    });
+        println!("{string_results}");
+    }
 
     let mut codes = std::collections::HashMap::new();
 
-    for r in all_results {
+    for r in &all_results {
         for cr in r {
             let counter = codes.entry(cr.status_code).or_insert(0);
             let new_count = *counter + 1;
@@ -64,18 +64,13 @@ async fn main() {
         }
     }
 
-    let table = tabled::Table::new(
-        codes
-            .iter()
-            .map(|(k, v)| StatsResult {
-                status_code: *k,
-                count: *v,
-            })
-            .collect::<Vec<StatsResult>>(),
-    )
+    let table = tabled::Table::new(codes.iter().map(|(k, v)| StatsResult {
+        status_code: *k,
+        count: *v,
+    }))
     .to_string();
 
-    println!("{}", table);
+    println!("{table}");
 }
 
 #[derive(tabled::Tabled)]
