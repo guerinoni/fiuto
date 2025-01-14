@@ -167,14 +167,16 @@ async fn drill_post_endpoint(
 
     let mut responses = vec![];
 
-    let mut digger = digger::Digger::new();
-    let root = digger.dig(payload, components);
-    if let Err(e) = root {
-        tracing::error!("Error digging the payload: {:?}", e);
-        return Ok(vec![]);
-    }
+    let mut prop_combinations = {
+        let mut digger = digger::Digger::new();
+        let root = digger.dig(payload, components);
+        if let Err(e) = root {
+            tracing::error!("Error digging the payload: {:?}", e);
+            return Ok(vec![]);
+        }
 
-    let mut prop_combinations = shuffler::do_it(digger.root);
+        shuffler::do_it(&digger.root)
+    };
 
     // add empty payload
     prop_combinations.push(std::collections::HashMap::new());
