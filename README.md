@@ -53,19 +53,20 @@ In case something is not working with URL, the tool stops at the first request.
 - inject token for request with auth (CLI parameter)
 - allow selection of server from `servers` property of spec with base url to use
 - test `nullable` field
-- skip deprecated
 - support get with payload
+- missing PUT
+- options for waiting every x request, or between every request
 - support POST with format like 
 ```
 requestBody:
-        required: true
-        description: Form containing OPML file
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
+  required: true
+  description: Form containing OPML file
+  content:
+    multipart/form-data:
+      schema:
+        type: object
+        properties:
+          file:
+            type: string
+            format: binary
 ```
