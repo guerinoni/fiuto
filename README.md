@@ -42,6 +42,7 @@ In case something is not working with URL, the tool stops at the first request.
 - the post request must have `requestBody` with `$ref`
 - spec should contains `components` section with the struct in ref above
 - in every `property` of the component's schema you need `example` to be filled (it uses that at the moment) or full example for the entire object
+- it is now using `example` fields to create payload
 
 ## Idea
 
