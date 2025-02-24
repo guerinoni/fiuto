@@ -5,6 +5,10 @@
   },
   "shell": {
     "scripts": {
+      "init_hook":[
+        "rustup default stable",
+        "rustup component add clippy"
+      ],
       "test": ["cargo test"]
     }
   }
