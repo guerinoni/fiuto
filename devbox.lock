@@ -1,56 +1,57 @@
 {
   "lockfile_version": "1",
   "packages": {
-    "cargo@1.84": {
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "resolved": "github:NixOS/nixpkgs/2d068ae5c6516b2d04562de50a58c682540de9bf?lastModified=1740303746&narHash=sha256-XcdiWLEhjJkMxDLKQJ0CCivmYYCvA5MDxu9pMybM5kM%3D"
+    },
+    "rustup@1.27.1": {
       "last_modified": "2025-02-07T11:26:36Z",
-      "resolved": "github:NixOS/nixpkgs/d98abf5cf5914e5e4e9d57205e3af55ca90ffc1d#cargo",
+      "plugin_version": "0.0.1",
+      "resolved": "github:NixOS/nixpkgs/d98abf5cf5914e5e4e9d57205e3af55ca90ffc1d#rustup",
       "source": "devbox-search",
-      "version": "1.84.0",
+      "version": "1.27.1",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/f6ffl4j307l0yvk7mywbsf59gmrkn7pc-cargo-1.84.0",
+              "path": "/nix/store/9b8v9lji5gjw5cj7f2nv3l184zyg0m3a-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/f6ffl4j307l0yvk7mywbsf59gmrkn7pc-cargo-1.84.0"
+          "store_path": "/nix/store/9b8v9lji5gjw5cj7f2nv3l184zyg0m3a-rustup-1.27.1"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/svw4q7s6sn5iisvc3r14i6hkx819ypg2-cargo-1.84.0",
+              "path": "/nix/store/d2g7zcymlvc5cjqcdpbqgrzzg2swwzik-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/svw4q7s6sn5iisvc3r14i6hkx819ypg2-cargo-1.84.0"
+          "store_path": "/nix/store/d2g7zcymlvc5cjqcdpbqgrzzg2swwzik-rustup-1.27.1"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/7nbcrxfxcpsapbbjh9gkapaz5n7llwcx-cargo-1.84.0",
+              "path": "/nix/store/pxbbd2112rlz283k82rsk0mfc9bw0jkb-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/7nbcrxfxcpsapbbjh9gkapaz5n7llwcx-cargo-1.84.0"
+          "store_path": "/nix/store/pxbbd2112rlz283k82rsk0mfc9bw0jkb-rustup-1.27.1"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/q01clim33r4zdcmmdymmzz6icalpx00s-cargo-1.84.0",
+              "path": "/nix/store/dqz7ghl1i46i8nswvkkl3h3jbhxkbchg-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/q01clim33r4zdcmmdymmzz6icalpx00s-cargo-1.84.0"
+          "store_path": "/nix/store/dqz7ghl1i46i8nswvkkl3h3jbhxkbchg-rustup-1.27.1"
         }
       }
-    },
-    "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "resolved": "github:NixOS/nixpkgs/2d068ae5c6516b2d04562de50a58c682540de9bf?lastModified=1740303746&narHash=sha256-XcdiWLEhjJkMxDLKQJ0CCivmYYCvA5MDxu9pMybM5kM%3D"
     }
   }
 }
