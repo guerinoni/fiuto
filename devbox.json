@@ -5,11 +5,10 @@
   },
   "shell": {
     "scripts": {
-      "init_hook":[
-        "rustup default stable",
-        "rustup component add clippy"
-      ],
-      "test": ["cargo test"]
+      "init_hook": ["rustup default stable", "rustup component add clippy"],
+      "test": [
+        "[ \"$(rustup show active-toolchain | grep stable)\" ] && cargo test || echo 'Error: Rust toolchain is not stable'"
+      ]
     }
   }
 }
