@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: "1.0.0"
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: Proprietary
+    url: "https://www.fiuto.io/"
+
+tags:
+  - name: Information
+    description: Endpoints that provide user or system-related information
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:

@@ -19,6 +19,8 @@ pub async fn do_it(
 ) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
+    let base_url = retrieve_base_url(openapi_schema.clone());
+
     let components = openapi_schema.components.map_or_else(
         || {
             tracing::error!("No components found in the openapi schema");
@@ -27,14 +29,7 @@ pub async fn do_it(
         |c| c,
     );
 
-    let base_url = openapi_schema.servers.first().map_or_else(
-        || {
-            tracing::error!("No servers found in the openapi schema");
-            std::process::exit(1);
-        },
-        |s| s.url.clone(),
-    );
-
+    // NOTE: url passed in the command line takes precedence over the one in the openapi schema
     let base_url = url.map_or(base_url, |b| b);
     let jwt_name = get_jwt_token(&components);
 
@@ -125,6 +120,8 @@ async fn drill_get_endpoint(
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
+    tracing::info!("GET URL: {}", url);
+
     let client = reqwest::Client::new();
     let mut req = client.request(reqwest::Method::GET, url.clone());
 
@@ -143,7 +140,10 @@ async fn drill_get_endpoint(
         }
     }
 
-    let r = req.build().unwrap(); // TODO: handle the error
+    let r = req.build().map_err(|e| {
+        tracing::error!("Error building request: {:?}", e);
+        e
+    })?;
     let resp = client.execute(r).await?;
 
     Ok(vec![CallResult {
@@ -221,9 +221,47 @@ async fn drill_post_endpoint(
     Ok(responses)
 }
 
+fn retrieve_base_url(openapi_schema: openapiv3::OpenAPI) -> String {
+    let base_url = openapi_schema.servers.first().map_or_else(
+        || {
+            tracing::error!("No servers found in the openapi schema");
+            std::process::exit(1);
+        },
+        |s| match s.variables {
+            Some(ref v) => {
+                let f = v.first().unwrap();
+                f.1.default.clone()
+            }
+
+            None => s.url.clone(),
+        },
+    );
+
+    base_url
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_base_url() {
+        {
+            // easy
+            let s = std::include_str!("./testdata/single_server.yml");
+            let openapi_schema = serde_yaml::from_str(s).unwrap();
+
+            let base = retrieve_base_url(openapi_schema);
+            assert_eq!(base, "http://127.0.0.1:8000");
+        }
+        {
+            // server from env
+            let s = std::include_str!("./testdata/server_from_env.yml");
+            let openapi_schema = serde_yaml::from_str(s).unwrap();
+            let base = retrieve_base_url(openapi_schema);
+            assert_eq!(base, "http://localhost:8000"); // pick the default one
+        }
+    }
 
     // This is a fake test to make sure the test suite is setup with tracing.
     #[test]

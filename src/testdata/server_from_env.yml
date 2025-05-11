@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: "1.0.0"
+  contact:
+    email: federico@fiuto.io
+  license:
+    name: Proprietary
+    url: "https://www.fiuto.io/"
+
+tags:
+  - name: Information
+    description: Endpoints that provide user or system-related information
+
+servers:
+  - url: "{VITE_API_BASE_URL}"
+    variables:
+      VITE_API_BASE_URL:
+        default: http://localhost:8000
+        description: Base URL for the API
+
+paths:
