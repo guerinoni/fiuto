@@ -2,17 +2,17 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.13.7/.schema/devbox.schema.json",
   "packages": {
     "libiconv": "latest",
-    "rustup":   "latest",
+    "rustup": "latest",
     "darwin.apple_sdk.frameworks.SystemConfiguration": {
       "platforms": ["x86_64-darwin", "aarch64-darwin"]
     },
-    "pkg-config":  "latest",
+    "pkg-config": "latest",
     "openssl_3_3": "3.3.2",
-    "cargo":       "1.85.0"
+    "cargo": "1.86.0"
   },
   "shell": {
     "init_hook": [
-      "if [ ! -d $RUSTUP_HOME/toolchains -o ! -d $RUSTUP_HOME/toolchains/stable ]; then rustup default 1.85.0; fi"
+      "if [ ! -d $RUSTUP_HOME/toolchains -o ! -d $RUSTUP_HOME/toolchains/stable ]; then rustup default 1.86.0; fi"
     ],
     "scripts": {
       "test": ["cargo test"]
