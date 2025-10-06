@@ -128,7 +128,7 @@ fn reference_to_schema_and_name(
 #[cfg(test)]
 pub fn load_flat_level() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let s = std::include_str!("./testdata/post_login.yml");
-    let openapi_schema = serde_yaml::from_str(&s);
+    let openapi_schema = serde_yaml_bw::from_str(&s);
     let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
@@ -147,7 +147,7 @@ pub fn load_flat_level() -> std::rc::Rc<std::cell::RefCell<Node>> {
 #[cfg(test)]
 pub fn load_nested() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let s = std::include_str!("./testdata/post_info_nested_property.yml");
-    let openapi_schema = serde_yaml::from_str(&s);
+    let openapi_schema = serde_yaml_bw::from_str(&s);
     let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
@@ -166,7 +166,7 @@ pub fn load_nested() -> std::rc::Rc<std::cell::RefCell<Node>> {
 #[cfg(test)]
 pub fn load_nested_2() -> std::rc::Rc<std::cell::RefCell<Node>> {
     let s = std::include_str!("./testdata/post_info_nested_property_2.yml");
-    let openapi_schema = serde_yaml::from_str(&s);
+    let openapi_schema = serde_yaml_bw::from_str(&s);
     let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
     let components = openapi_schema.components.unwrap();
     let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn nested() {
         let s = std::include_str!("./testdata/post_info_nested_property.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
         let components = openapi_schema.components.unwrap();
         let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
 
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn nested_with_simple_along() {
         let s = std::include_str!("./testdata/post_info_nested_property_2.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
         let components = openapi_schema.components.unwrap();
         let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
 

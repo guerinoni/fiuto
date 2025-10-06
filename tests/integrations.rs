@@ -150,7 +150,7 @@ async fn get_info_simple() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/get_info.yml");
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
     let r = fiuto::do_it(openapi_schema, Some(url), None).await;
 
     assert!(r.is_ok());
@@ -166,7 +166,7 @@ async fn post_login() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/post_login.yml");
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
     let r = fiuto::do_it(openapi_schema, Some(url), None).await;
 
     assert!(r.is_ok());
@@ -185,7 +185,7 @@ async fn get_with_jwt() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
     let token = Some("test_token_get_with_jwt".to_owned());
     let r = fiuto::do_it(openapi_schema, Some(url), token).await;
 
@@ -202,7 +202,7 @@ async fn post_with_jwt() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
     let token = Some("test_token_post_with_jwt".to_owned());
     let r = fiuto::do_it(openapi_schema, Some(url), token).await;
 
@@ -214,7 +214,7 @@ async fn post_with_nested_property_body() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/post_info_nested_property.yml");
-    let openapi_schema: openapiv3::OpenAPI = serde_yaml::from_str(s).unwrap();
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
     let r = fiuto::do_it(openapi_schema, Some(url), None).await;
 
     assert!(r.is_ok());

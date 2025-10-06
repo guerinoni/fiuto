@@ -14,7 +14,6 @@ pub fn do_it(
         if !n.children.is_empty() {
             let m = do_it(c);
             sub_properties.insert(c.borrow().name.clone(), m);
-            continue;
         }
     }
 

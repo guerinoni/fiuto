@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn scan_get() {
         let s = std::include_str!("./testdata/get_info.yml");
-        let openapi_schema = serde_yaml::from_str(s);
+        let openapi_schema = serde_yaml_bw::from_str(s);
         assert!(openapi_schema.is_ok());
 
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn scan_post() {
         let s = std::include_str!("./testdata/post_login.yml");
-        let openapi_schema = serde_yaml::from_str(s);
+        let openapi_schema = serde_yaml_bw::from_str(s);
         assert!(openapi_schema.is_ok());
 
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
@@ -135,7 +135,7 @@ mod tests {
     fn skip_deprecated() {
         {
             let s = std::include_str!("./testdata/get_info_deprecated.yml");
-            let openapi_schema = serde_yaml::from_str(s);
+            let openapi_schema = serde_yaml_bw::from_str(s);
             assert!(openapi_schema.is_ok());
 
             let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
@@ -144,7 +144,7 @@ mod tests {
         }
         {
             let s = std::include_str!("./testdata/post_login_deprecated.yml");
-            let openapi_schema = serde_yaml::from_str(s);
+            let openapi_schema = serde_yaml_bw::from_str(s);
             assert!(openapi_schema.is_ok());
 
             let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();

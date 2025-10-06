@@ -33,7 +33,7 @@ async fn main() {
         }
     };
 
-    let openapi_schema: openapiv3::OpenAPI = match serde_yaml::from_str(&s) {
+    let openapi_schema: openapiv3::OpenAPI = match serde_yaml_bw::from_str(&s) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("Error parsing yaml: {:?}", e);

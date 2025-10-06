@@ -19,7 +19,7 @@ pub async fn do_it(
 ) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
     tracing::info!("openapi version: {}", openapi_schema.openapi);
 
-    let base_url = retrieve_base_url(openapi_schema.clone());
+    let base_url = retrieve_base_url(&openapi_schema);
 
     let components = openapi_schema.components.map_or_else(
         || {
@@ -125,8 +125,8 @@ async fn drill_get_endpoint(
     let client = reqwest::Client::new();
     let mut req = client.request(reqwest::Method::GET, url.clone());
 
-    if let Some(s) = security {
-        if jwt.is_some() && jwt_name.is_some() {
+    if let Some(s) = security
+        && jwt.is_some() && jwt_name.is_some() {
             for ss in s {
                 for (k, _) in ss {
                     let jwt_name = jwt_name.clone().unwrap();
@@ -138,7 +138,6 @@ async fn drill_get_endpoint(
                 }
             }
         }
-    }
 
     let r = req.build().map_err(|e| {
         tracing::error!("Error building request: {:?}", e);
@@ -191,8 +190,8 @@ async fn drill_post_endpoint(
             .body(s.clone())
             .header("Content-Type", "application/json"); // TODO: Make this configurable
 
-        if let Some(ref s) = security {
-            if jwt.is_some() && jwt_name.is_some() {
+        if let Some(ref s) = security
+            && jwt.is_some() && jwt_name.is_some() {
                 for ss in s {
                     for (k, _) in ss {
                         let jwt_name = jwt_name.clone().unwrap();
@@ -204,7 +203,6 @@ async fn drill_post_endpoint(
                     }
                 }
             }
-        }
 
         let r = req.build().unwrap(); // TODO: handle the error
         let resp = client.execute(r).await?;
@@ -221,23 +219,17 @@ async fn drill_post_endpoint(
     Ok(responses)
 }
 
-fn retrieve_base_url(openapi_schema: openapiv3::OpenAPI) -> String {
-    let base_url = openapi_schema.servers.first().map_or_else(
+fn retrieve_base_url(openapi_schema: &openapiv3::OpenAPI) -> String {
+    openapi_schema.servers.first().map_or_else(
         || {
             tracing::error!("No servers found in the openapi schema");
             std::process::exit(1);
         },
-        |s| match s.variables {
-            Some(ref v) => {
-                let f = v.first().unwrap();
-                f.1.default.clone()
-            }
-
-            None => s.url.clone(),
-        },
-    );
-
-    base_url
+        |s| s.variables.as_ref().map_or_else(|| s.url.clone(), |v| {
+            let f = v.first().unwrap();
+            f.1.default.clone()
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -249,7 +241,7 @@ mod tests {
         {
             // easy
             let s = std::include_str!("./testdata/single_server.yml");
-            let openapi_schema = serde_yaml::from_str(s).unwrap();
+            let openapi_schema = &serde_yaml_bw::from_str(s).unwrap();
 
             let base = retrieve_base_url(openapi_schema);
             assert_eq!(base, "http://127.0.0.1:8000");
@@ -257,7 +249,7 @@ mod tests {
         {
             // server from env
             let s = std::include_str!("./testdata/server_from_env.yml");
-            let openapi_schema = serde_yaml::from_str(s).unwrap();
+            let openapi_schema = &serde_yaml_bw::from_str(s).unwrap();
             let base = retrieve_base_url(openapi_schema);
             assert_eq!(base, "http://localhost:8000"); // pick the default one
         }
@@ -273,7 +265,7 @@ mod tests {
     #[test]
     fn find_jwt_token_in_components() {
         let s = std::include_str!("./testdata/get_more_info_with_jwt.yml");
-        let openapi_schema = serde_yaml::from_str(s);
+        let openapi_schema = serde_yaml_bw::from_str(s);
         assert!(openapi_schema.is_ok());
 
         let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
