@@ -279,4 +279,90 @@ mod tests {
 
         assert!(children.next().is_none());
     }
+
+    #[test]
+    fn node_creation_and_parent_child_relationship() {
+        let parent = Node::new("parent", serde_json::json!("parent_value"));
+        let child = Node::new("child", serde_json::json!("child_value"));
+
+        Node::add_child(&parent, std::rc::Rc::clone(&child));
+
+        // Check parent has the child
+        assert_eq!(parent.borrow().children.len(), 1);
+        assert_eq!(parent.borrow().children[0].borrow().name, "child");
+
+        // Check child has reference to parent
+        assert!(child.borrow().parent.is_some());
+        let parent_ref = child.borrow().parent.as_ref().unwrap().upgrade().unwrap();
+        assert_eq!(parent_ref.borrow().name, "parent");
+    }
+
+    #[test]
+    fn digger_initializes_with_root() {
+        let digger = Digger::new();
+        assert_eq!(digger.root.borrow().name, "root");
+        assert_eq!(digger.root.borrow().value, serde_json::Value::Null);
+        assert_eq!(digger.root.borrow().children.len(), 0);
+    }
+
+    #[test]
+    fn flat_properties_are_added_to_tree() {
+        let root = load_flat_level();
+        let root_borrowed = root.borrow();
+
+        // Should have 3 children: email, org, password
+        assert_eq!(root_borrowed.children.len(), 3);
+
+        let mut child_names: Vec<String> = root_borrowed
+            .children
+            .iter()
+            .map(|c| c.borrow().name.clone())
+            .collect();
+        child_names.sort();
+
+        assert_eq!(child_names, vec!["email", "org", "password"]);
+    }
+
+    #[test]
+    fn nested_properties_create_hierarchy() {
+        let root = load_nested();
+        let root_borrowed = root.borrow();
+
+        // Should have 1 child: hq
+        assert_eq!(root_borrowed.children.len(), 1);
+
+        let hq = root_borrowed.children.first().unwrap();
+        assert_eq!(hq.borrow().name, "hq");
+
+        // hq should have 5 children
+        assert_eq!(hq.borrow().children.len(), 5);
+    }
+
+    #[test]
+    fn mixed_flat_and_nested_properties() {
+        let root = load_nested_2();
+        let root_borrowed = root.borrow();
+
+        // Should have 2 children: hq (nested) and other (flat)
+        assert_eq!(root_borrowed.children.len(), 2);
+
+        let mut found_flat = false;
+        let mut found_nested = false;
+
+        for child in &root_borrowed.children {
+            let child_borrowed = child.borrow();
+            if child_borrowed.name == "other" {
+                found_flat = true;
+                // Flat properties should have no children
+                assert_eq!(child_borrowed.children.len(), 0);
+            } else if child_borrowed.name == "hq" {
+                found_nested = true;
+                // Nested object should have children
+                assert!(child_borrowed.children.len() > 0);
+            }
+        }
+
+        assert!(found_flat);
+        assert!(found_nested);
+    }
 }

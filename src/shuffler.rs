@@ -308,4 +308,51 @@ mod tests {
 
         assert_eq!(c.len(), 96);
     }
+
+    #[test]
+    fn empty_root_produces_empty_combinations() {
+        let root = crate::digger::Node::new("root", serde_json::Value::Null);
+        let c = crate::shuffler::do_it(&root);
+
+        // No children means no combinations
+        assert_eq!(c.len(), 0);
+    }
+
+    #[test]
+    fn power_set_calculation_is_correct() {
+        // For n properties, we should get 2^n - 1 combinations
+        // (excluding the empty set)
+        let root = crate::digger::load_flat_level();
+
+        // This has 3 properties: email, org, password
+        // Expected combinations: 2^3 - 1 = 7
+        let c = crate::shuffler::do_it(&root);
+        assert_eq!(c.len(), 7);
+    }
+
+    #[test]
+    fn nested_object_combinations_include_all_variants() {
+        let root = crate::digger::load_nested();
+        let c = crate::shuffler::do_it(&root);
+
+        // For nested object with 5 properties: 2^5 = 32 combinations
+        // (1 for null object + 31 for property combinations)
+        assert_eq!(c.len(), 32);
+
+        // First combination should have hq as null
+        let first = c.get(0).unwrap();
+        assert!(first.contains_key("hq"));
+        assert_eq!(first.get("hq").unwrap(), &serde_json::Value::Null);
+
+        // Other combinations should have hq as an object with various properties
+        let has_hq_with_address = c.iter().any(|combo| {
+            if let Some(hq) = combo.get("hq") {
+                if let Some(obj) = hq.as_object() {
+                    return obj.contains_key("address");
+                }
+            }
+            false
+        });
+        assert!(has_hq_with_address);
+    }
 }

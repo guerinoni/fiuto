@@ -152,4 +152,50 @@ mod tests {
             assert_eq!(posts.len(), 0);
         }
     }
+
+    #[test]
+    fn post_without_json_content_type_is_filtered() {
+        let s = std::include_str!("./testdata/post_non_json_content.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+
+        // Should be empty because it doesn't have application/json content type
+        assert_eq!(posts.len(), 0);
+    }
+
+    #[test]
+    fn get_method_is_correctly_identified() {
+        let s = std::include_str!("./testdata/get_info.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let gets = collect_gets(&openapi_schema.paths);
+
+        assert_eq!(gets.len(), 1);
+        let get_op = gets.first().unwrap();
+        assert_eq!(get_op.method, "GET");
+        assert_eq!(get_op.path, "/api/v1/org/more/info");
+        assert!(get_op.payload.is_none());
+    }
+
+    #[test]
+    fn post_method_is_correctly_identified() {
+        let s = std::include_str!("./testdata/post_login.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+
+        assert_eq!(posts.len(), 1);
+        let post_op = posts.first().unwrap();
+        assert_eq!(post_op.method, "POST");
+        assert_eq!(post_op.path, "/api/v1/login");
+    }
+
+    #[test]
+    fn populate_payload_resolves_references() {
+        let s = std::include_str!("./testdata/post_login.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+
+        let post_op = posts.first().unwrap();
+        // Payload should be populated from the $ref
+        assert!(post_op.payload.is_some());
+    }
 }

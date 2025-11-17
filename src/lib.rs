@@ -284,4 +284,26 @@ mod tests {
         assert!(jwt.is_some());
         assert_eq!(jwt.unwrap(), "bearerAuth");
     }
+
+    #[test]
+    fn jwt_token_not_found_when_no_bearer_scheme() {
+        // Test with a spec that has no security schemes
+        let s = std::include_str!("./testdata/get_info.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let components = openapi_schema.components.unwrap();
+        let jwt = get_jwt_token(&components);
+
+        assert!(jwt.is_none());
+    }
+
+    #[test]
+    fn retrieve_base_url_with_multiple_servers() {
+        // When there are multiple servers, it should pick the first one
+        let s = std::include_str!("./testdata/single_server.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let base = retrieve_base_url(&openapi_schema);
+
+        // Should use the first server's URL
+        assert_eq!(base, "http://127.0.0.1:8000");
+    }
 }
