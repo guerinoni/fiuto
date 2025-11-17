@@ -73,8 +73,8 @@ where
         parts: &mut axum::http::request::Parts,
         _state: &S,
     ) -> Result<Self, Self::Rejection> {
-        use axum_extra::headers::authorization::Bearer;
         use axum_extra::headers::Authorization;
+        use axum_extra::headers::authorization::Bearer;
 
         let axum_extra::TypedHeader(Authorization(bearer)) = parts
             .extract::<axum_extra::TypedHeader<Authorization<Bearer>>>()

@@ -126,18 +126,20 @@ async fn drill_get_endpoint(
     let mut req = client.request(reqwest::Method::GET, url.clone());
 
     if let Some(s) = security
-        && jwt.is_some() && jwt_name.is_some() {
-            for ss in s {
-                for (k, _) in ss {
-                    let jwt_name = jwt_name.clone().unwrap();
-                    let jwt = jwt.clone().unwrap();
+        && jwt.is_some()
+        && jwt_name.is_some()
+    {
+        for ss in s {
+            for (k, _) in ss {
+                let jwt_name = jwt_name.clone().unwrap();
+                let jwt = jwt.clone().unwrap();
 
-                    if k == jwt_name {
-                        req = req.header("Authorization", format!("Bearer {jwt}"));
-                    }
+                if k == jwt_name {
+                    req = req.header("Authorization", format!("Bearer {jwt}"));
                 }
             }
         }
+    }
 
     let r = req.build().map_err(|e| {
         tracing::error!("Error building request: {:?}", e);
@@ -191,18 +193,20 @@ async fn drill_post_endpoint(
             .header("Content-Type", "application/json"); // TODO: Make this configurable
 
         if let Some(ref s) = security
-            && jwt.is_some() && jwt_name.is_some() {
-                for ss in s {
-                    for (k, _) in ss {
-                        let jwt_name = jwt_name.clone().unwrap();
-                        let jwt = jwt.clone().unwrap();
+            && jwt.is_some()
+            && jwt_name.is_some()
+        {
+            for ss in s {
+                for (k, _) in ss {
+                    let jwt_name = jwt_name.clone().unwrap();
+                    let jwt = jwt.clone().unwrap();
 
-                        if k == &jwt_name {
-                            req = req.header("Authorization", format!("Bearer {jwt}"));
-                        }
+                    if k == &jwt_name {
+                        req = req.header("Authorization", format!("Bearer {jwt}"));
                     }
                 }
             }
+        }
 
         let r = req.build().unwrap(); // TODO: handle the error
         let resp = client.execute(r).await?;
@@ -225,10 +229,15 @@ fn retrieve_base_url(openapi_schema: &openapiv3::OpenAPI) -> String {
             tracing::error!("No servers found in the openapi schema");
             std::process::exit(1);
         },
-        |s| s.variables.as_ref().map_or_else(|| s.url.clone(), |v| {
-            let f = v.first().unwrap();
-            f.1.default.clone()
-        }),
+        |s| {
+            s.variables.as_ref().map_or_else(
+                || s.url.clone(),
+                |v| {
+                    let f = v.first().unwrap();
+                    f.1.default.clone()
+                },
+            )
+        },
     )
 }
 
