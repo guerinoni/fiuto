@@ -74,7 +74,7 @@ mod tests {
         let root = crate::digger::load_flat_level();
         let c = crate::shuffler::do_it(&root);
 
-        println!("{:#?}", c);
+        println!("{c:#?}");
 
         assert_eq!(c.len(), 7);
 

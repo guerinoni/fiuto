@@ -172,7 +172,7 @@ mod tests {
         assert_eq!(gets.len(), 1);
         let get_op = gets.first().unwrap();
         assert_eq!(get_op.method, "GET");
-        assert_eq!(get_op.path, "/api/v1/org/more/info");
+        assert_eq!(get_op.path, "/api/v1/org/info");
         assert!(get_op.payload.is_none());
     }
 

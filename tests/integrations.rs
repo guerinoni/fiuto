@@ -9,6 +9,7 @@ async fn run_api() -> String {
         .route("/api/v1/org/info", axum::routing::get(info))
         .route("/api/v1/org/more/info", axum::routing::get(more_info))
         .route("/api/v1/org/login", axum::routing::post(login_handler))
+        .route("/api/v1/login", axum::routing::post(login_handler))
         .route("/api/v1/org/info", axum::routing::post(post_info))
         .route("/api/v1/org/hq", axum::routing::post(post_hq))
         .with_state(state);
@@ -158,7 +159,10 @@ async fn get_info_simple() {
 
     assert_eq!(r.len(), 1);
 
-    // TODO: add more checks about code returned/expected
+    let endpoint_results = r.first().unwrap();
+    assert_eq!(endpoint_results.len(), 1);
+    // GET without auth should succeed
+    assert_eq!(endpoint_results.first().unwrap().status_code, 200);
 }
 
 #[tokio::test]
@@ -174,10 +178,22 @@ async fn post_login() {
 
     assert_eq!(r.len(), 1); // 1 endpoint
 
-    let combinations = r.get(0).unwrap();
-    assert_eq!(combinations.len(), 8);
+    let combinations = r.first().unwrap();
+    assert_eq!(combinations.len(), 8); // 2^3 - 1 combinations + 1 empty payload
 
-    // TODO: add more checks about code returned/expected
+    // only the full payload (all 3 fields) should succeed with 200
+    // partial/empty payloads should fail with 422 (Unprocessable Entity)
+    let success_count = combinations
+        .iter()
+        .filter(|c| c.status_code == 200)
+        .count();
+    let error_count = combinations
+        .iter()
+        .filter(|c| c.status_code == 422)
+        .count();
+
+    assert_eq!(success_count, 1, "Only complete payload should succeed");
+    assert_eq!(error_count, 7, "Incomplete payloads should return 422");
 }
 
 #[tokio::test]
@@ -194,7 +210,10 @@ async fn get_with_jwt() {
     let r = r.unwrap();
     assert_eq!(r.len(), 1);
 
-    // TODO: Add more check, specially about the token, but we need responses more info, not just code.
+    let endpoint_results = r.first().unwrap();
+    assert_eq!(endpoint_results.len(), 1);
+    // GET with valid JWT should succeed
+    assert_eq!(endpoint_results.first().unwrap().status_code, 200);
 }
 
 #[tokio::test]
@@ -207,6 +226,20 @@ async fn post_with_jwt() {
     let r = fiuto::do_it(openapi_schema, Some(url), token).await;
 
     assert!(r.is_ok());
+
+    let r = r.unwrap();
+    assert_eq!(r.len(), 1);
+
+    let combinations = r.first().unwrap();
+    // infoRequest has 1 property (address), so 2^1 - 1 + 1 empty = 2 combinations
+    assert_eq!(combinations.len(), 2);
+
+    // with valid JWT: complete payload should succeed, empty should fail
+    let success_count = combinations
+        .iter()
+        .filter(|c| c.status_code == 200)
+        .count();
+    assert_eq!(success_count, 1, "Complete payload with JWT should succeed");
 }
 
 #[tokio::test]
@@ -218,4 +251,60 @@ async fn post_with_nested_property_body() {
     let r = fiuto::do_it(openapi_schema, Some(url), None).await;
 
     assert!(r.is_ok());
+
+    let r = r.unwrap();
+    assert_eq!(r.len(), 1);
+
+    let combinations = r.first().unwrap();
+    // nested HQ has 5 properties, so combinations will be generated for those
+    assert!(!combinations.is_empty());
+
+    // only complete nested payload should succeed
+    let success_count = combinations
+        .iter()
+        .filter(|c| c.status_code == 200)
+        .count();
+    assert!(success_count >= 1, "Complete nested payload should succeed");
+}
+
+#[tokio::test]
+async fn get_without_jwt_returns_401() {
+    let url = run_api().await;
+
+    // this spec requires JWT but we don't provide one
+    let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+
+    assert!(r.is_ok());
+
+    let r = r.unwrap();
+    assert_eq!(r.len(), 1);
+
+    let endpoint_results = r.first().unwrap();
+    assert_eq!(endpoint_results.len(), 1);
+    // GET without required JWT should return 401 Unauthorized
+    assert_eq!(endpoint_results.first().unwrap().status_code, 401);
+}
+
+#[tokio::test]
+async fn post_without_jwt_returns_401() {
+    let url = run_api().await;
+
+    // this spec requires JWT but we don't provide one
+    let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
+    let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+
+    assert!(r.is_ok());
+
+    let r = r.unwrap();
+    assert_eq!(r.len(), 1);
+
+    let combinations = r.first().unwrap();
+    // all requests should fail with 401 since no JWT provided
+    assert!(
+        combinations.iter().all(|c| c.status_code == 401),
+        "All requests without JWT should return 401"
+    );
 }

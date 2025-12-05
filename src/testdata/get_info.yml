@@ -18,7 +18,7 @@ servers:
     description: Local host test
 
 paths:
-  /api/v1/org/more/info:
+  /api/v1/org/info:
     get:
       tags:
         - Information
