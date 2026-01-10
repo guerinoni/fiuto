@@ -7,7 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install devbox
-        uses: jetify-com/devbox-install-action@main
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Check formatting
+        run: nix develop --command cargo fmt --check
+      - name: Clippy
+        run: nix develop --command cargo clippy -- -D warnings
       - name: Test
-        run: devbox run test
+        run: nix develop --command cargo test
