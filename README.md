@@ -1,6 +1,31 @@
 # Fiuto
 
-> fiuto in italian means "sense of smell" or "intuition" in general. It can refer literally to the ability to smell, like an animal’s keen sense of smell, or figuratively to a person’s intuition or instinct, especially for detecting something hidden or understanding a situation quickly.
+> fiuto in italian means "sense of smell" or "intuition" in general. It can refer literally to the ability to smell, like an animal's keen sense of smell, or figuratively to a person's intuition or instinct, especially for detecting something hidden or understanding a situation quickly.
+
+## Building
+
+Build the binary:
+```zsh
+nix build
+```
+
+The binary will be available at `./result/bin/fiuto`.
+
+Run directly without installing:
+```zsh
+nix run . -- ./openapi.yml
+```
+
+## Development
+
+Enter a development shell with all dependencies
+```zsh
+nix develop
+# then use standard Cargo commands:
+cargo build
+cargo test
+cargo clippy
+```
 
 ## Why this project
 
