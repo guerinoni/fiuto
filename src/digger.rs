@@ -5,8 +5,8 @@
 pub struct Node {
     pub name: String,
     pub value: serde_json::Value,
-    pub parent: Option<std::rc::Weak<std::cell::RefCell<Node>>>,
-    pub children: Vec<std::rc::Rc<std::cell::RefCell<Node>>>,
+    pub parent: Option<std::rc::Weak<std::cell::RefCell<Self>>>,
+    pub children: Vec<std::rc::Rc<std::cell::RefCell<Self>>>,
 }
 
 impl Node {

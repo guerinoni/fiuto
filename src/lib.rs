@@ -21,13 +21,10 @@ pub async fn do_it(
 
     let base_url = retrieve_base_url(&openapi_schema);
 
-    let components = openapi_schema.components.map_or_else(
-        || {
-            tracing::error!("No components found in the openapi schema");
-            std::process::exit(1);
-        },
-        |c| c,
-    );
+    let components = openapi_schema.components.unwrap_or_else(|| {
+        tracing::error!("No components found in the openapi schema");
+        std::process::exit(1);
+    });
 
     // NOTE: url passed in the command line takes precedence over the one in the openapi schema
     let base_url = url.map_or(base_url, |b| b);
@@ -149,7 +146,7 @@ async fn drill_get_endpoint(
 
     Ok(vec![CallResult {
         payload: String::new(),
-        path: url.to_string(),
+        path: url.clone(),
         status_code: resp.status().as_u16(),
     }])
 }
@@ -215,7 +212,7 @@ async fn drill_post_endpoint(
 
         responses.push(CallResult {
             payload: s,
-            path: url.to_string(),
+            path: url.clone(),
             status_code: resp.status().as_u16(),
         });
     }

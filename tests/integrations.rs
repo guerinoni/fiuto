@@ -183,14 +183,8 @@ async fn post_login() {
 
     // only the full payload (all 3 fields) should succeed with 200
     // partial/empty payloads should fail with 422 (Unprocessable Entity)
-    let success_count = combinations
-        .iter()
-        .filter(|c| c.status_code == 200)
-        .count();
-    let error_count = combinations
-        .iter()
-        .filter(|c| c.status_code == 422)
-        .count();
+    let success_count = combinations.iter().filter(|c| c.status_code == 200).count();
+    let error_count = combinations.iter().filter(|c| c.status_code == 422).count();
 
     assert_eq!(success_count, 1, "Only complete payload should succeed");
     assert_eq!(error_count, 7, "Incomplete payloads should return 422");
@@ -235,10 +229,7 @@ async fn post_with_jwt() {
     assert_eq!(combinations.len(), 2);
 
     // with valid JWT: complete payload should succeed, empty should fail
-    let success_count = combinations
-        .iter()
-        .filter(|c| c.status_code == 200)
-        .count();
+    let success_count = combinations.iter().filter(|c| c.status_code == 200).count();
     assert_eq!(success_count, 1, "Complete payload with JWT should succeed");
 }
 
@@ -260,10 +251,7 @@ async fn post_with_nested_property_body() {
     assert!(!combinations.is_empty());
 
     // only complete nested payload should succeed
-    let success_count = combinations
-        .iter()
-        .filter(|c| c.status_code == 200)
-        .count();
+    let success_count = combinations.iter().filter(|c| c.status_code == 200).count();
     assert!(success_count >= 1, "Complete nested payload should succeed");
 }
 
