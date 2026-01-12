@@ -10,12 +10,10 @@ pub struct Op {
 pub fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
     paths
         .iter()
-        .map(|p| {
+        .filter_map(|p| {
             let pp = p.0.to_owned();
-            let i = p.1.to_owned();
-            let i = i.as_item();
-            let i = i.unwrap();
-            (pp, i.clone())
+            let i = p.1.as_item()?;
+            Some((pp, i.clone()))
         })
         .filter(|p| p.1.get.is_some())
         .filter(|p| !p.1.get.as_ref().unwrap().deprecated)
@@ -31,12 +29,10 @@ pub fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
 pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components) -> Vec<Op> {
     let mut p = paths
         .iter()
-        .map(|p| {
+        .filter_map(|p| {
             let pp = p.0.to_owned();
-            let i = p.1.to_owned();
-            let i = i.as_item();
-            let i = i.unwrap();
-            (pp, i.clone())
+            let i = p.1.as_item()?;
+            Some((pp, i.clone()))
         })
         .filter(|p| p.1.post.is_some())
         .filter(|p| !p.1.post.as_ref().unwrap().deprecated)
@@ -48,7 +44,10 @@ pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components
         .filter(|p| p.1.request_body.is_some())
         .filter(|p| {
             let req_body = p.1.request_body.as_ref().unwrap();
-            let req_body = req_body.as_item().unwrap();
+            let req_body = resolve_request_body(req_body, components);
+            let Some(req_body) = req_body else {
+                return false;
+            };
             req_body
                 .content
                 .iter()
@@ -67,13 +66,31 @@ pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components
     p
 }
 
+/// Resolves a `RequestBody` reference to its actual `RequestBody`.
+/// Returns the `RequestBody` if it's an inline item or if the reference can be resolved.
+/// Extracts the component name from the last segment of the reference path.
+fn resolve_request_body<'a>(
+    req_body: &'a openapiv3::ReferenceOr<openapiv3::RequestBody>,
+    components: &'a openapiv3::Components,
+) -> Option<&'a openapiv3::RequestBody> {
+    match req_body {
+        openapiv3::ReferenceOr::Item(item) => Some(item),
+        openapiv3::ReferenceOr::Reference { reference } => {
+            let ref_name = reference.rsplit('/').next()?;
+            components.request_bodies.get(ref_name)?.as_item()
+        }
+    }
+}
+
 fn populate_payload(op: &mut Vec<Op>, components: &openapiv3::Components) {
     for o in op {
         let Some(req) = &o.operation.request_body else {
             continue;
         };
 
-        let Some(req) = req.as_item() else { continue };
+        let Some(req) = resolve_request_body(req, components) else {
+            continue;
+        };
 
         for (_, media_type) in &req.content {
             let Some(schema) = &media_type.schema else {
@@ -196,6 +213,20 @@ mod tests {
 
         let post_op = posts.first().unwrap();
         // Payload should be populated from the $ref
+        assert!(post_op.payload.is_some());
+    }
+
+    #[test]
+    fn request_body_reference_is_resolved() {
+        let s = std::include_str!("./testdata/post_login_request_body_ref.yml");
+        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
+        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+
+        assert_eq!(posts.len(), 1);
+        let post_op = posts.first().unwrap();
+        assert_eq!(post_op.method, "POST");
+        assert_eq!(post_op.path, "/api/v1/login");
+        // Payload should be resolved through the requestBody $ref
         assert!(post_op.payload.is_some());
     }
 }
