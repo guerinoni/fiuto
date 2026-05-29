@@ -17,6 +17,10 @@ struct Args {
     /// Token JWT to use in request headers
     #[clap(long)]
     jwt: Option<String>,
+
+    /// Print the raw per-request results as JSON before the summary
+    #[clap(long)]
+    json: bool,
 }
 
 #[tokio::main]
@@ -49,32 +53,111 @@ async fn main() {
         }
     };
 
-    for r in &all_results {
-        let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
-        println!("{string_results}");
-    }
-
-    let mut codes = std::collections::HashMap::new();
-
-    for r in &all_results {
-        for cr in r {
-            let counter = codes.entry(cr.status_code).or_insert(0);
-            let new_count = *counter + 1;
-            codes.insert(cr.status_code, new_count);
+    if args.json {
+        for r in &all_results {
+            let string_results = serde_json::to_string_pretty(&r).unwrap(); // FIXME: handle the error
+            println!("{string_results}");
         }
     }
 
-    let table = tabled::Table::new(codes.iter().map(|(k, v)| StatsResult {
-        status_code: *k,
-        count: *v,
-    }))
-    .to_string();
-
-    println!("{table}");
+    print_summary(&all_results);
 }
 
-#[derive(tabled::Tabled)]
-struct StatsResult {
-    status_code: u16,
-    count: u32,
+/// Renders a fixed-width bar scaled so that `max` fills `width` cells.
+fn bar(value: u32, max: u32, width: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
+
+    let filled = (value as usize * width) / max as usize;
+    // Always show at least one cell for a non-zero value so small counts
+    // don't render as an empty bar.
+    let filled = filled.max(usize::from(value > 0));
+
+    "█".repeat(filled)
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_owned();
+    }
+
+    let head: String = s.chars().take(max).collect();
+    format!("{head}…")
+}
+
+fn print_summary(all_results: &[Vec<fiuto::CallResult>]) {
+    let endpoints = all_results.len();
+
+    let mut codes: std::collections::BTreeMap<u16, u32> = std::collections::BTreeMap::new();
+    let mut classes = [0u32; 5]; // index 0 -> 1xx, ... index 4 -> 5xx
+    let mut total = 0u32;
+
+    for r in all_results {
+        for cr in r {
+            *codes.entry(cr.status_code).or_default() += 1;
+            total += 1;
+
+            let class = (cr.status_code / 100) as usize;
+            if (1..=5).contains(&class) {
+                classes[class - 1] += 1;
+            }
+        }
+    }
+
+    println!();
+    println!("════════════════════ fiuto summary ════════════════════");
+    println!("requests: {total}    endpoints: {endpoints}");
+
+    let class_labels = ["1xx info", "2xx ok", "3xx redirect", "4xx client", "5xx server"];
+    let max_class = classes.iter().copied().max().unwrap_or(0);
+
+    println!();
+    println!("by class");
+    for (i, count) in classes.iter().enumerate() {
+        if *count == 0 {
+            continue;
+        }
+        println!(
+            "  {:<13} {:>4}  {}",
+            class_labels[i],
+            count,
+            bar(*count, max_class, 30)
+        );
+    }
+
+    let max_code = codes.values().copied().max().unwrap_or(0);
+
+    println!();
+    println!("by status code");
+    for (code, count) in &codes {
+        println!("  {code:>3} {count:>4}  {}", bar(*count, max_code, 30));
+    }
+
+    // A fuzzer driving random payloads should never make the server crash,
+    // so surface every 5xx as a likely bug with the payload that caused it.
+    let server_errors: Vec<&fiuto::CallResult> = all_results
+        .iter()
+        .flatten()
+        .filter(|cr| cr.status_code >= 500)
+        .collect();
+
+    if !server_errors.is_empty() {
+        println!();
+        println!(
+            "⚠ {} server error(s) (5xx), possible bugs",
+            server_errors.len()
+        );
+        for cr in server_errors.iter().take(20) {
+            let payload = if cr.payload.is_empty() {
+                "<empty>".to_owned()
+            } else {
+                truncate(&cr.payload, 80)
+            };
+            println!("  {} {}  {}", cr.status_code, cr.path, payload);
+        }
+        if server_errors.len() > 20 {
+            println!("  ... {} more", server_errors.len() - 20);
+        }
+    }
 }

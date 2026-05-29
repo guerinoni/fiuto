@@ -7,8 +7,8 @@ pub use parser::parse_openapi;
 
 #[derive(Debug, serde::Serialize)]
 pub struct CallResult {
-    payload: String,
-    path: String,
+    pub payload: String,
+    pub path: String,
     pub status_code: u16,
 }
 
