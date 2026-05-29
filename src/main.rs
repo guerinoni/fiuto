@@ -33,10 +33,10 @@ async fn main() {
         }
     };
 
-    let openapi_schema: openapiv3::OpenAPI = match serde_yaml_bw::from_str(&s) {
+    let openapi_schema = match fiuto::parse_openapi(&s) {
         Ok(s) => s,
         Err(e) => {
-            tracing::error!("Error parsing yaml: {:?}", e);
+            tracing::error!("Cannot parse OpenAPI document: {e}");
             std::process::exit(1);
         }
     };

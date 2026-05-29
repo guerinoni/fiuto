@@ -64,43 +64,33 @@ impl Digger {
         self.current = parent;
     }
 
+    /// Walks the properties of an object schema, building the tree. A property
+    /// that resolves to an object with its own properties becomes a nested
+    /// level; any other property is a leaf and must carry an example value.
     pub fn dig(
         &mut self,
-        schema: openapiv3::Schema,
-        components: &openapiv3::Components,
+        schema: &oas3::spec::ObjectSchema,
+        spec: &oas3::Spec,
     ) -> Result<(), String> {
-        let openapiv3::SchemaKind::Type(t) = schema.schema_kind else {
-            tracing::warn!("Unsupported schema kind: {:?}", schema.schema_kind);
-            return Err("Unsupported schema kind".to_owned());
-        };
+        for (name, prop) in &schema.properties {
+            let resolved = crate::collector::resolve_object_schema(prop, spec)?;
 
-        let openapiv3::Type::Object(obj) = t else {
-            tracing::warn!("Unsupported type: {:?}", t);
-            return Err("Unsupported type".to_owned());
-        };
+            if resolved.properties.is_empty() {
+                let Some(v) = resolved.example.clone() else {
+                    let msg = format!("No example found for property: {name}");
+                    return Err(msg);
+                };
 
-        for (name, p) in obj.properties {
-            match p {
-                openapiv3::ReferenceOr::Item(item) => {
-                    let Some(v) = item.schema_data.example else {
-                        let msg = format!("No example found for property: {name}");
-                        return Err(msg);
-                    };
+                let n = Node::new(name, v);
+                n.borrow_mut().parent = Some(std::rc::Rc::downgrade(&self.current));
 
-                    let n = Node::new(&name, v);
-                    n.borrow_mut().parent = Some(std::rc::Rc::downgrade(&self.current));
+                self.current.borrow_mut().children.push(n);
+            } else {
+                self.add_child_and_enter(name);
 
-                    self.current.borrow_mut().children.push(n);
-                }
-                openapiv3::ReferenceOr::Reference { reference } => {
-                    let (_, schema) = reference_to_schema_and_name(&reference, components)?;
+                self.dig(&resolved, spec)?;
 
-                    self.add_child_and_enter(&name);
-
-                    self.dig(schema, components)?;
-
-                    self.exit_one_level();
-                }
+                self.exit_one_level();
             }
         }
 
@@ -108,78 +98,38 @@ impl Digger {
     }
 }
 
-/// It converts a reference from full name to a tuple with schema name and schema.
-fn reference_to_schema_and_name(
-    reference: &str,
-    components: &openapiv3::Components,
-) -> Result<(String, openapiv3::Schema), String> {
-    let name = reference.trim_start_matches("#/components/schemas/");
-    let Some(schema) = components.schemas.get(name) else {
-        let msg = format!("No schema found for reference: {reference}");
-        return Err(msg);
-    };
+#[cfg(test)]
+fn dig_payload(spec_yaml: &str) -> std::rc::Rc<std::cell::RefCell<Node>> {
+    let spec = crate::parse_openapi(spec_yaml).unwrap();
+    let posts = crate::collector::collect_post(&spec);
 
-    let s = schema.as_item();
-    let s = s.unwrap();
+    let mut digger = Digger::new();
+    let f = posts.first().unwrap();
+    let payload = f.payload.clone().unwrap();
 
-    Ok((name.to_owned(), s.clone()))
+    let result = digger.dig(&payload, &spec);
+    assert!(result.is_ok());
+
+    digger.root
 }
 
 #[cfg(test)]
 pub fn load_flat_level() -> std::rc::Rc<std::cell::RefCell<Node>> {
-    let s = std::include_str!("./testdata/post_login.yml");
-    let openapi_schema = serde_yaml_bw::from_str(&s);
-    let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-    let components = openapi_schema.components.unwrap();
-    let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
-
-    let mut digger = Digger::new();
-    let f = posts.first().unwrap();
-    let s = f.payload.clone();
-    let s = s.unwrap();
-
-    let result = digger.dig(s, &components);
-    assert!(result.is_ok());
-
-    digger.root
+    dig_payload(std::include_str!("./testdata/post_login.yml"))
 }
 
 #[cfg(test)]
 pub fn load_nested() -> std::rc::Rc<std::cell::RefCell<Node>> {
-    let s = std::include_str!("./testdata/post_info_nested_property.yml");
-    let openapi_schema = serde_yaml_bw::from_str(&s);
-    let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-    let components = openapi_schema.components.unwrap();
-    let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
-
-    let mut digger = Digger::new();
-    let f = posts.first().unwrap();
-    let s = f.payload.clone();
-    let s = s.unwrap();
-
-    let result = digger.dig(s, &components);
-    assert!(result.is_ok());
-
-    digger.root
+    dig_payload(std::include_str!(
+        "./testdata/post_info_nested_property.yml"
+    ))
 }
 
 #[cfg(test)]
 pub fn load_nested_2() -> std::rc::Rc<std::cell::RefCell<Node>> {
-    let s = std::include_str!("./testdata/post_info_nested_property_2.yml");
-    let openapi_schema = serde_yaml_bw::from_str(&s);
-    let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-    let components = openapi_schema.components.unwrap();
-    let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
-
-    let mut digger = Digger::new();
-    let f = posts.first().unwrap();
-    let s = f.payload.clone();
-    let s = s.unwrap();
-
-    let result = digger.dig(s, &components);
-    assert!(result.is_ok());
-
-    digger.root
+    dig_payload(std::include_str!(
+        "./testdata/post_info_nested_property_2.yml"
+    ))
 }
 
 #[cfg(test)]
@@ -189,18 +139,16 @@ mod tests {
     #[test]
     fn nested() {
         let s = std::include_str!("./testdata/post_info_nested_property.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let components = openapi_schema.components.unwrap();
-        let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
+        let spec = crate::parse_openapi(s).unwrap();
+        let posts = crate::collector::collect_post(&spec);
 
         let f = posts.first().unwrap();
-        assert_ne!(f.payload, None);
+        assert!(f.payload.is_some());
 
-        let s = f.payload.clone();
-        let s = s.unwrap();
+        let payload = f.payload.clone().unwrap();
 
         let mut digger = Digger::new();
-        let result = digger.dig(s, &components);
+        let result = digger.dig(&payload, &spec);
         assert!(result.is_ok());
 
         // check the tree generated from the schema
@@ -235,18 +183,16 @@ mod tests {
     #[test]
     fn nested_with_simple_along() {
         let s = std::include_str!("./testdata/post_info_nested_property_2.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let components = openapi_schema.components.unwrap();
-        let posts = crate::collector::collect_post(&openapi_schema.paths, &components);
+        let spec = crate::parse_openapi(s).unwrap();
+        let posts = crate::collector::collect_post(&spec);
 
         let f = posts.first().unwrap();
-        assert_ne!(f.payload, None);
+        assert!(f.payload.is_some());
 
-        let s = f.payload.clone();
-        let s = s.unwrap();
+        let payload = f.payload.clone().unwrap();
 
         let mut digger = Digger::new();
-        let result = digger.dig(s, &components);
+        let result = digger.dig(&payload, &spec);
         assert!(result.is_ok());
 
         let root = digger.root.borrow();

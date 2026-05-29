@@ -1,171 +1,154 @@
+use oas3::Spec;
+use oas3::spec::{ObjectOrReference, ObjectSchema, Operation, RequestBody, Schema};
+
 /// Op is the struct that represents an operation in the `OpenAPI` spec.
 #[derive(Clone)]
 pub struct Op {
     pub path: String,
     pub method: String,
-    pub operation: openapiv3::Operation,
-    pub payload: Option<openapiv3::Schema>,
+    pub operation: Operation,
+    pub payload: Option<ObjectSchema>,
 }
 
-pub fn collect_gets(paths: &openapiv3::Paths) -> Vec<Op> {
+pub fn collect_gets(spec: &Spec) -> Vec<Op> {
+    let Some(paths) = &spec.paths else {
+        return vec![];
+    };
+
     paths
         .iter()
-        .filter_map(|p| {
-            let pp = p.0.to_owned();
-            let i = p.1.as_item()?;
-            Some((pp, i.clone()))
-        })
-        .filter(|p| p.1.get.is_some())
-        .filter(|p| !p.1.get.as_ref().unwrap().deprecated)
-        .map(|p| Op {
-            path: p.0,
-            method: "GET".to_owned(),
-            operation: p.1.get.unwrap(),
-            payload: None,
+        .filter_map(|(path, item)| {
+            let op = item.get.as_ref()?;
+            if op.deprecated.unwrap_or(false) {
+                return None;
+            }
+            Some(Op {
+                path: path.clone(),
+                method: "GET".to_owned(),
+                operation: op.clone(),
+                payload: None,
+            })
         })
         .collect()
 }
 
-pub fn collect_post(paths: &openapiv3::Paths, components: &openapiv3::Components) -> Vec<Op> {
-    let mut p = paths
+pub fn collect_post(spec: &Spec) -> Vec<Op> {
+    let Some(paths) = &spec.paths else {
+        return vec![];
+    };
+
+    let mut ops: Vec<Op> = paths
         .iter()
-        .filter_map(|p| {
-            let pp = p.0.to_owned();
-            let i = p.1.as_item()?;
-            Some((pp, i.clone()))
-        })
-        .filter(|p| p.1.post.is_some())
-        .filter(|p| !p.1.post.as_ref().unwrap().deprecated)
-        .map(|p| {
-            let post = p.1.post.unwrap();
-            let path = p.0;
-            (path, post)
-        })
-        .filter(|p| p.1.request_body.is_some())
-        .filter(|p| {
-            let req_body = p.1.request_body.as_ref().unwrap();
-            let req_body = resolve_request_body(req_body, components);
-            let Some(req_body) = req_body else {
-                return false;
-            };
-            req_body
-                .content
-                .iter()
-                .any(|(k, _)| k == "application/json")
-        })
-        .map(|p| Op {
-            path: p.0,
-            method: "POST".to_owned(),
-            operation: p.1,
-            payload: None,
+        .filter_map(|(path, item)| {
+            let op = item.post.as_ref()?;
+            if op.deprecated.unwrap_or(false) {
+                return None;
+            }
+
+            let req_body = resolve_request_body(op.request_body.as_ref()?, spec)?;
+            // FIXME: in long term this should be required? :)
+            if !req_body.content.contains_key("application/json") {
+                return None;
+            }
+
+            Some(Op {
+                path: path.clone(),
+                method: "POST".to_owned(),
+                operation: op.clone(),
+                payload: None,
+            })
         })
         .collect();
 
-    populate_payload(&mut p, components);
+    populate_payload(&mut ops, spec);
 
-    p
+    ops
 }
 
-/// Resolves a `RequestBody` reference to its actual `RequestBody`.
-/// Returns the `RequestBody` if it's an inline item or if the reference can be resolved.
-/// Extracts the component name from the last segment of the reference path.
-fn resolve_request_body<'a>(
-    req_body: &'a openapiv3::ReferenceOr<openapiv3::RequestBody>,
-    components: &'a openapiv3::Components,
-) -> Option<&'a openapiv3::RequestBody> {
-    match req_body {
-        openapiv3::ReferenceOr::Item(item) => Some(item),
-        openapiv3::ReferenceOr::Reference { reference } => {
-            let ref_name = reference.rsplit('/').next()?;
-            components.request_bodies.get(ref_name)?.as_item()
+/// Resolves a `RequestBody`, following a `$ref` when needed.
+fn resolve_request_body(
+    req_body: &ObjectOrReference<RequestBody>,
+    spec: &Spec,
+) -> Option<RequestBody> {
+    req_body.resolve(spec).ok()
+}
+
+fn populate_payload(ops: &mut [Op], spec: &Spec) {
+    for o in ops {
+        let Some(req) = o.operation.request_body.as_ref() else {
+            continue;
+        };
+
+        let Some(req) = resolve_request_body(req, spec) else {
+            continue;
+        };
+
+        let Some(media_type) = req.content.get("application/json") else {
+            continue;
+        };
+
+        let Some(schema) = &media_type.schema else {
+            tracing::warn!("no schema for request {}", o.path);
+            continue;
+        };
+
+        match resolve_object_schema(schema, spec) {
+            Ok(obj) => o.payload = Some(obj),
+            Err(e) => tracing::warn!("cannot resolve payload schema for {}: {e}", o.path),
         }
     }
 }
 
-fn populate_payload(op: &mut Vec<Op>, components: &openapiv3::Components) {
-    for o in op {
-        let Some(req) = &o.operation.request_body else {
-            continue;
-        };
-
-        let Some(req) = resolve_request_body(req, components) else {
-            continue;
-        };
-
-        for (_, media_type) in &req.content {
-            let Some(schema) = &media_type.schema else {
-                continue;
-            };
-
-            let reference = match schema {
-                openapiv3::ReferenceOr::Reference { reference } => reference.clone(),
-                openapiv3::ReferenceOr::Item(_) => String::new(),
-            };
-
-            if reference.is_empty() {
-                tracing::warn!("reference is empty for request {}", o.path);
-                continue;
+/// Resolves a `Schema` (inline or `$ref`) down to a concrete `ObjectSchema`.
+pub fn resolve_object_schema(schema: &Schema, spec: &Spec) -> Result<ObjectSchema, String> {
+    match schema.resolve(spec).map_err(|e| e.to_string())? {
+        Schema::Object(obj_ref) => match *obj_ref {
+            ObjectOrReference::Object(obj) => Ok(obj),
+            ObjectOrReference::Ref { ref_path, .. } => {
+                Err(format!("unresolved reference: {ref_path}"))
             }
-
-            let reference = reference.trim_start_matches("#/components/schemas/");
-            let Some(schema) = components.schemas.get(reference) else {
-                continue;
-            };
-
-            let ss = schema.as_item();
-            o.payload = ss.cloned();
-        }
+        },
+        Schema::Boolean(_) => Err("boolean schema is not supported".to_owned()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parse_openapi;
 
     #[test]
     fn scan_get() {
         let s = std::include_str!("./testdata/get_info.yml");
-        let openapi_schema = serde_yaml_bw::from_str(s);
-        assert!(openapi_schema.is_ok());
-
-        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-        let gets = collect_gets(&openapi_schema.paths);
+        let spec = parse_openapi(s).unwrap();
+        let gets = collect_gets(&spec);
         assert_eq!(gets.len(), 1);
     }
 
     #[test]
     fn scan_post() {
         let s = std::include_str!("./testdata/post_login.yml");
-        let openapi_schema = serde_yaml_bw::from_str(s);
-        assert!(openapi_schema.is_ok());
-
-        let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
         assert_eq!(posts.len(), 1);
 
         let f = posts.first().unwrap();
         assert_eq!(f.path, "/api/v1/login");
-        assert_ne!(f.payload, None);
+        assert!(f.payload.is_some());
     }
 
     #[test]
     fn skip_deprecated() {
         {
             let s = std::include_str!("./testdata/get_info_deprecated.yml");
-            let openapi_schema = serde_yaml_bw::from_str(s);
-            assert!(openapi_schema.is_ok());
-
-            let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-            let gets = collect_gets(&openapi_schema.paths);
+            let spec = parse_openapi(s).unwrap();
+            let gets = collect_gets(&spec);
             assert_eq!(gets.len(), 0);
         }
         {
             let s = std::include_str!("./testdata/post_login_deprecated.yml");
-            let openapi_schema = serde_yaml_bw::from_str(s);
-            assert!(openapi_schema.is_ok());
-
-            let openapi_schema: openapiv3::OpenAPI = openapi_schema.unwrap();
-            let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+            let spec = parse_openapi(s).unwrap();
+            let posts = collect_post(&spec);
             assert_eq!(posts.len(), 0);
         }
     }
@@ -173,8 +156,8 @@ mod tests {
     #[test]
     fn post_without_json_content_type_is_filtered() {
         let s = std::include_str!("./testdata/post_non_json_content.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
 
         // Should be empty because it doesn't have application/json content type
         assert_eq!(posts.len(), 0);
@@ -183,8 +166,8 @@ mod tests {
     #[test]
     fn get_method_is_correctly_identified() {
         let s = std::include_str!("./testdata/get_info.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let gets = collect_gets(&openapi_schema.paths);
+        let spec = parse_openapi(s).unwrap();
+        let gets = collect_gets(&spec);
 
         assert_eq!(gets.len(), 1);
         let get_op = gets.first().unwrap();
@@ -196,8 +179,8 @@ mod tests {
     #[test]
     fn post_method_is_correctly_identified() {
         let s = std::include_str!("./testdata/post_login.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
 
         assert_eq!(posts.len(), 1);
         let post_op = posts.first().unwrap();
@@ -208,8 +191,8 @@ mod tests {
     #[test]
     fn populate_payload_resolves_references() {
         let s = std::include_str!("./testdata/post_login.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
 
         let post_op = posts.first().unwrap();
         // Payload should be populated from the $ref
@@ -219,8 +202,8 @@ mod tests {
     #[test]
     fn request_body_reference_is_resolved() {
         let s = std::include_str!("./testdata/post_login_request_body_ref.yml");
-        let openapi_schema: openapiv3::OpenAPI = serde_yaml_bw::from_str(s).unwrap();
-        let posts = collect_post(&openapi_schema.paths, &openapi_schema.components.unwrap());
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
 
         assert_eq!(posts.len(), 1);
         let post_op = posts.first().unwrap();
