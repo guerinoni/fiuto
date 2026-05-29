@@ -77,8 +77,10 @@ impl Digger {
 
             if resolved.properties.is_empty() {
                 let Some(v) = resolved.example.clone() else {
-                    let msg = format!("No example found for property: {name}");
-                    return Err(msg);
+                    // No example means we can't generate a value for this
+                    // property, so skip it instead of failing the whole payload.
+                    tracing::warn!("No example found for property: {name}, skipping");
+                    continue;
                 };
 
                 let n = Node::new(name, v);
