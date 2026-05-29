@@ -1,0 +1,13 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: '1.0.0'
+
+servers:
+  - url: http://first.example.com
+    description: First server, should be picked
+  - url: http://second.example.com
+    description: Second server, ignored
+
+paths:

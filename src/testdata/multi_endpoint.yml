@@ -1,0 +1,50 @@
+openapi: 3.0.3
+info:
+  title: fiuto OpenAPI Spec
+  description: This is the spec for internal REST API
+  version: '1.0.0'
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/org/info:
+    get:
+      operationId: getOrgInfo
+      summary: Get Organization Information
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/login:
+    post:
+      operationId: login
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - org
+        - password
+      properties:
+        email:
+          type: string
+          example: "federico@fiuto.io"
+        org:
+          type: string
+          example: "fiuto"
+        password:
+          type: string
+          example: "CiaoCiao1234$#"

@@ -296,3 +296,75 @@ async fn post_without_jwt_returns_401() {
         "All requests without JWT should return 401"
     );
 }
+
+#[tokio::test]
+async fn multi_endpoint_runs_get_and_post() {
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/multi_endpoint.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+
+    // one GET endpoint and one POST endpoint
+    assert_eq!(r.len(), 2);
+
+    // GET is collected first and returns a single 200 result
+    let get_results = &r[0];
+    assert_eq!(get_results.len(), 1);
+    assert_eq!(get_results[0].status_code, 200);
+
+    // POST login drills 2^3 - 1 field combinations plus the empty payload
+    let post_results = &r[1];
+    assert_eq!(post_results.len(), 8);
+    let success = post_results.iter().filter(|c| c.status_code == 200).count();
+    assert_eq!(success, 1, "only the complete payload should succeed");
+}
+
+#[tokio::test]
+async fn post_without_property_examples_sends_only_empty_payload() {
+    let url = run_api().await;
+
+    // No per-property example means the digger produces no leaves, so the only
+    // request driven is the empty payload that drill_post_endpoint always adds.
+    let s = std::include_str!("../src/testdata/post_login_obj_example.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+
+    assert_eq!(r.len(), 1);
+    let combinations = r.first().unwrap();
+    assert_eq!(combinations.len(), 1, "only the empty payload is sent");
+    // login_handler needs all fields, so the empty payload is rejected
+    assert_eq!(combinations[0].status_code, 422);
+}
+
+#[tokio::test]
+async fn deprecated_endpoints_are_skipped_end_to_end() {
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/get_info_deprecated.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+
+    // The only endpoint is deprecated, so nothing is executed.
+    assert!(r.is_empty(), "deprecated endpoint should not be called");
+}
+
+#[tokio::test]
+async fn cli_base_url_overrides_spec_server() {
+    let url = run_api().await;
+
+    // The spec points at 127.0.0.1:8000 which is not listening; the CLI url must
+    // take precedence so the request still reaches the live test server.
+    let s = std::include_str!("../src/testdata/get_info.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    let r = fiuto::do_it(openapi_schema, Some(url.clone()), None)
+        .await
+        .unwrap();
+
+    let endpoint_results = r.first().unwrap();
+    assert!(
+        endpoint_results[0].path.starts_with(&url),
+        "request should target the CLI-provided base url"
+    );
+    assert_eq!(endpoint_results[0].status_code, 200);
+}

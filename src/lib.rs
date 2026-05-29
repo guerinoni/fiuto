@@ -280,11 +280,28 @@ mod tests {
     #[test]
     fn retrieve_base_url_with_multiple_servers() {
         // When there are multiple servers, it should pick the first one
-        let s = std::include_str!("./testdata/single_server.yml");
+        let s = std::include_str!("./testdata/multiple_servers.yml");
         let spec = parse_openapi(s).unwrap();
         let base = retrieve_base_url(&spec);
 
-        // Should use the first server's URL
-        assert_eq!(base, "http://127.0.0.1:8000");
+        assert_eq!(base, "http://first.example.com");
+    }
+
+    #[test]
+    fn jwt_token_ignored_for_non_bearer_http_scheme() {
+        // A basic-auth scheme is HTTP but not bearer, so no JWT name is found.
+        let s = std::include_str!("./testdata/get_info_basic_auth.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert!(get_jwt_token(&spec).is_none());
+    }
+
+    #[test]
+    fn jwt_scheme_matching_is_case_insensitive() {
+        // The bearer scheme name is matched ignoring ASCII case.
+        let s = std::include_str!("./testdata/get_more_info_with_jwt.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert_eq!(get_jwt_token(&spec).unwrap(), "bearerAuth");
     }
 }

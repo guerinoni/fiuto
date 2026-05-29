@@ -109,4 +109,66 @@ components:
         let err = parse_openapi("openapi: : :").expect_err("garbage should fail");
         assert!(err.contains("line"), "error should mention a line: {err}");
     }
+
+    #[test]
+    fn boolean_exclusive_maximum_from_30_is_tolerated() {
+        let spec = spec_with_field(
+            "type: integer\n          maximum: 10\n          exclusiveMaximum: true",
+        );
+        parse_openapi(&spec).expect("3.0 boolean exclusiveMaximum should be tolerated");
+    }
+
+    #[test]
+    fn both_boolean_exclusive_flags_are_tolerated() {
+        let spec = spec_with_field(
+            "type: integer\n          minimum: 1\n          maximum: 10\n          exclusiveMinimum: true\n          exclusiveMaximum: false",
+        );
+        parse_openapi(&spec).expect("both boolean exclusive flags should be tolerated");
+    }
+
+    #[test]
+    fn numeric_exclusive_minimum_is_preserved() {
+        // 3.1 uses the numeric form; the shim must leave it untouched.
+        let spec = spec_with_field("type: integer\n          exclusiveMinimum: 1");
+        parse_openapi(&spec).expect("numeric exclusiveMinimum should parse");
+    }
+
+    #[test]
+    fn boolean_exclusive_flag_inside_array_is_stripped() {
+        // The flag can hide inside a oneOf/anyOf sequence, so the walker must
+        // recurse into array items too.
+        let spec = r#"
+openapi: 3.1.0
+info:
+  title: t
+  version: "1.0"
+paths: {}
+components:
+  schemas:
+    Thing:
+      type: object
+      properties:
+        field:
+          oneOf:
+            - type: integer
+              minimum: 1
+              exclusiveMinimum: true
+            - type: string
+"#;
+        parse_openapi(spec).expect("boolean flag nested in array should be stripped");
+    }
+
+    #[test]
+    fn valid_yaml_but_not_openapi_fails() {
+        let err = parse_openapi("foo: bar\nbaz: 1").expect_err("non-openapi doc should fail");
+        assert!(
+            err.contains("invalid OpenAPI document"),
+            "should report invalid openapi: {err}"
+        );
+    }
+
+    #[test]
+    fn empty_input_fails() {
+        parse_openapi("").expect_err("empty input should fail");
+    }
 }

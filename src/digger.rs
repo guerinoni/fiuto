@@ -287,6 +287,36 @@ mod tests {
     }
 
     #[test]
+    fn per_property_examples_populate_all_leaves() {
+        // Every property carries its own example, so all three become leaves.
+        let root = dig_payload(std::include_str!(
+            "./testdata/post_login_properties_example.yml"
+        ));
+        assert_eq!(root.borrow().children.len(), 3);
+    }
+
+    #[test]
+    fn property_without_example_is_skipped() {
+        // Only the object-level example is present; leaf properties have none,
+        // so the digger skips every property and the tree stays empty.
+        let root = dig_payload(std::include_str!("./testdata/post_login_obj_example.yml"));
+        assert_eq!(root.borrow().children.len(), 0);
+    }
+
+    #[test]
+    fn leaf_values_match_property_examples() {
+        let root = load_flat_level();
+        let root_borrowed = root.borrow();
+
+        let email = root_borrowed
+            .children
+            .iter()
+            .find(|c| c.borrow().name == "email")
+            .expect("email leaf should exist");
+        assert_eq!(email.borrow().value, serde_json::json!("federico@fiuto.io"));
+    }
+
+    #[test]
     fn mixed_flat_and_nested_properties() {
         let root = load_nested_2();
         let root_borrowed = root.borrow();

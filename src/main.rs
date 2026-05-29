@@ -109,7 +109,13 @@ fn print_summary(all_results: &[Vec<fiuto::CallResult>]) {
     println!("════════════════════ fiuto summary ════════════════════");
     println!("requests: {total}    endpoints: {endpoints}");
 
-    let class_labels = ["1xx info", "2xx ok", "3xx redirect", "4xx client", "5xx server"];
+    let class_labels = [
+        "1xx info",
+        "2xx ok",
+        "3xx redirect",
+        "4xx client",
+        "5xx server",
+    ];
     let max_class = classes.iter().copied().max().unwrap_or(0);
 
     println!();
@@ -159,5 +165,61 @@ fn print_summary(all_results: &[Vec<fiuto::CallResult>]) {
         if server_errors.len() > 20 {
             println!("  ... {} more", server_errors.len() - 20);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{bar, truncate};
+
+    #[test]
+    fn bar_is_empty_when_max_is_zero() {
+        // Guard against divide-by-zero when no requests were recorded.
+        assert_eq!(bar(0, 0, 30), "");
+        assert_eq!(bar(5, 0, 30), "");
+    }
+
+    #[test]
+    fn bar_fills_full_width_at_max() {
+        assert_eq!(bar(10, 10, 30), "█".repeat(30));
+    }
+
+    #[test]
+    fn bar_scales_proportionally() {
+        // 1/10 of 30 cells -> 3 cells.
+        assert_eq!(bar(1, 10, 30), "█".repeat(3));
+    }
+
+    #[test]
+    fn bar_shows_at_least_one_cell_for_nonzero() {
+        // 1/100 rounds to 0 cells but a non-zero count must stay visible.
+        assert_eq!(bar(1, 100, 30), "█");
+    }
+
+    #[test]
+    fn bar_zero_value_renders_empty() {
+        assert_eq!(bar(0, 10, 30), "");
+    }
+
+    #[test]
+    fn truncate_keeps_short_strings() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_keeps_string_at_exact_limit() {
+        assert_eq!(truncate("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_cuts_long_strings_and_appends_ellipsis() {
+        assert_eq!(truncate("hello world", 5), "hello…");
+    }
+
+    #[test]
+    fn truncate_counts_chars_not_bytes() {
+        // Multibyte chars must not be split mid-codepoint.
+        assert_eq!(truncate("àéîõü", 5), "àéîõü");
+        assert_eq!(truncate("àéîõü", 3), "àéî…");
     }
 }

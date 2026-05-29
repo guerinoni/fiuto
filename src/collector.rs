@@ -212,4 +212,60 @@ mod tests {
         // Payload should be resolved through the requestBody $ref
         assert!(post_op.payload.is_some());
     }
+
+    #[test]
+    fn spec_without_paths_collects_nothing() {
+        // single_server.yml declares `paths:` as empty.
+        let s = std::include_str!("./testdata/single_server.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert_eq!(collect_gets(&spec).len(), 0);
+        assert_eq!(collect_post(&spec).len(), 0);
+    }
+
+    #[test]
+    fn get_only_spec_has_no_posts() {
+        let s = std::include_str!("./testdata/get_info.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert_eq!(collect_gets(&spec).len(), 1);
+        assert_eq!(collect_post(&spec).len(), 0);
+    }
+
+    #[test]
+    fn post_only_spec_has_no_gets() {
+        let s = std::include_str!("./testdata/post_login.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert_eq!(collect_gets(&spec).len(), 0);
+        assert_eq!(collect_post(&spec).len(), 1);
+    }
+
+    #[test]
+    fn multi_endpoint_spec_collects_both_methods() {
+        let s = std::include_str!("./testdata/multi_endpoint.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        let gets = collect_gets(&spec);
+        let posts = collect_post(&spec);
+
+        assert_eq!(gets.len(), 1);
+        assert_eq!(gets.first().unwrap().path, "/api/v1/org/info");
+        assert_eq!(posts.len(), 1);
+        assert_eq!(posts.first().unwrap().path, "/api/v1/login");
+        assert!(posts.first().unwrap().payload.is_some());
+    }
+
+    #[test]
+    fn post_payload_with_only_object_level_example_has_no_leaves() {
+        // Properties carry no per-property example, only the object carries one;
+        // the digger consumes per-property examples, so payload still resolves
+        // but yields no usable leaf values downstream.
+        let s = std::include_str!("./testdata/post_login_obj_example.yml");
+        let spec = parse_openapi(s).unwrap();
+        let posts = collect_post(&spec);
+
+        assert_eq!(posts.len(), 1);
+        assert!(posts.first().unwrap().payload.is_some());
+    }
 }

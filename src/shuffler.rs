@@ -309,6 +309,39 @@ mod tests {
         assert_eq!(c.len(), 96);
     }
 
+    fn root_with_leaves(
+        leaves: &[(&str, serde_json::Value)],
+    ) -> std::rc::Rc<std::cell::RefCell<crate::digger::Node>> {
+        let root = crate::digger::Node::new("root", serde_json::Value::Null);
+        for (name, value) in leaves {
+            let child = crate::digger::Node::new(name, value.clone());
+            root.borrow_mut().children.push(child);
+        }
+        root
+    }
+
+    #[test]
+    fn single_property_produces_one_combination() {
+        // 2^1 - 1 = 1
+        let root = root_with_leaves(&[("a", serde_json::json!("x"))]);
+        let c = crate::shuffler::do_it(&root);
+
+        assert_eq!(c.len(), 1);
+        assert!(c[0].contains_key("a"));
+    }
+
+    #[test]
+    fn two_properties_produce_three_combinations() {
+        // 2^2 - 1 = 3: {a}, {b}, {a,b}
+        let root =
+            root_with_leaves(&[("a", serde_json::json!("x")), ("b", serde_json::json!("y"))]);
+        let c = crate::shuffler::do_it(&root);
+
+        assert_eq!(c.len(), 3);
+        let both = c.iter().any(|m| m.contains_key("a") && m.contains_key("b"));
+        assert!(both, "the full combination must be present");
+    }
+
     #[test]
     fn empty_root_produces_empty_combinations() {
         let root = crate::digger::Node::new("root", serde_json::Value::Null);
