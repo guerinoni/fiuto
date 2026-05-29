@@ -79,10 +79,15 @@ async fn exec_operation(
     base_url: &str,
     (jwt_name, jwt): (Option<String>, Option<String>),
 ) -> Result<Vec<CallResult>, reqwest::Error> {
+    // An operation without its own `security` inherits the spec-level requirement
+    let security = if op.operation.security.is_empty() {
+        &spec.security
+    } else {
+        &op.operation.security
+    };
+
     match op.method.as_str() {
-        "GET" => {
-            drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), &op.operation.security).await
-        }
+        "GET" => drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), security).await,
         "POST" => {
             let Some(s) = op.payload else {
                 tracing::warn!("No payload found for POST {}", op.path);
@@ -94,7 +99,7 @@ async fn exec_operation(
                 op.path.as_str(),
                 &s,
                 (jwt_name, jwt),
-                &op.operation.security,
+                security,
                 spec,
             )
             .await
