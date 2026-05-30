@@ -30,9 +30,11 @@ impl Default for Throttle {
     }
 }
 
-/// Drives an `OpenAPI` spec: collects every operation, builds the input
-/// combinations and fires them at the server. Build one with [`Driller::new`],
-/// tune it with the setters, then [`run`](Driller::run) it.
+/// Drives an `OpenAPI` spec.
+///
+/// Collects every operation, builds the input combinations and fires them at
+/// the server. Build one with [`Driller::new`], tune it with the setters, then
+/// [`run`](Driller::run) it.
 pub struct Driller {
     spec: oas3::Spec,
     base_url: Option<String>,
