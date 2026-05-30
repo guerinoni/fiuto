@@ -30,66 +30,100 @@ impl Default for Throttle {
     }
 }
 
-/// Execute all operations in the openapi schema
-///
-/// # Errors
-pub async fn do_it(
+/// Drives an OpenAPI spec: collects every operation, builds the input
+/// combinations and fires them at the server. Build one with [`Driller::new`],
+/// tune it with the setters, then [`run`](Driller::run) it.
+pub struct Driller {
     spec: oas3::Spec,
-    url: Option<String>,
-    jwt: Option<String>,
-) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
-    do_it_with_throttle(spec, url, jwt, Throttle::default()).await
-}
-
-/// Same as [`do_it`] but spaces out the requests according to `throttle`.
-///
-/// # Errors
-pub async fn do_it_with_throttle(
-    spec: oas3::Spec,
-    url: Option<String>,
+    base_url: Option<String>,
     jwt: Option<String>,
     throttle: Throttle,
-) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
-    tracing::info!("openapi version: {}", spec.openapi);
+}
 
-    let base_url = retrieve_base_url(&spec);
-
-    // NOTE: url passed in the command line takes precedence over the one in the openapi schema
-    let base_url = url.map_or(base_url, |b| b);
-    let jwt_name = get_jwt_token(&spec);
-
-    let posts = collector::collect_post(&spec);
-    let gets = collector::collect_gets(&spec);
-
-    let mut operations = vec![];
-    operations.extend_from_slice(gets.as_slice());
-    operations.extend_from_slice(posts.as_slice());
-
-    let mut all_results = vec![];
-
-    // Shared across operations so `every` counts requests globally instead of
-    // restarting the count for each endpoint.
-    let mut pacer = Pacer::new(throttle);
-
-    for p in operations {
-        let result = exec_operation(
-            &spec,
-            p.clone(),
-            &base_url,
-            (jwt_name.clone(), jwt.clone()),
-            &mut pacer,
-        )
-        .await;
-        match result {
-            Ok(r) => all_results.push(r),
-            Err(e) => {
-                tracing::error!("Error executing operation: {:?}", e);
-                return Err(e);
-            }
+impl Driller {
+    #[must_use]
+    pub fn new(spec: oas3::Spec) -> Self {
+        Self {
+            spec,
+            base_url: None,
+            jwt: None,
+            throttle: Throttle::default(),
         }
     }
 
-    Ok(all_results)
+    /// Override the server base URL. Takes precedence over the one declared in
+    /// the spec.
+    #[must_use]
+    pub fn base_url(mut self, url: impl Into<String>) -> Self {
+        self.base_url = Some(url.into());
+        self
+    }
+
+    /// Bearer token sent on endpoints that declare a matching security scheme.
+    #[must_use]
+    pub fn jwt(mut self, jwt: impl Into<String>) -> Self {
+        self.jwt = Some(jwt.into());
+        self
+    }
+
+    /// Space out requests to avoid hitting rate limits.
+    #[must_use]
+    pub const fn throttle(mut self, throttle: Throttle) -> Self {
+        self.throttle = throttle;
+        self
+    }
+
+    /// Execute all operations in the spec.
+    ///
+    /// # Errors
+    /// Returns the first request error encountered, stopping the run.
+    pub async fn run(self) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
+        let Self {
+            spec,
+            base_url,
+            jwt,
+            throttle,
+        } = self;
+
+        tracing::info!("openapi version: {}", spec.openapi);
+
+        // NOTE: url passed in the command line takes precedence over the one in the openapi schema
+        let base_url = base_url.unwrap_or_else(|| retrieve_base_url(&spec));
+        let jwt_name = get_jwt_token(&spec);
+
+        let posts = collector::collect_post(&spec);
+        let gets = collector::collect_gets(&spec);
+
+        let mut operations = vec![];
+        operations.extend_from_slice(gets.as_slice());
+        operations.extend_from_slice(posts.as_slice());
+
+        let mut all_results = vec![];
+
+        // Shared across operations so `every` counts requests globally instead
+        // of restarting the count for each endpoint.
+        let mut pacer = Pacer::new(throttle);
+
+        for p in operations {
+            let result = exec_operation(
+                &spec,
+                p.clone(),
+                &base_url,
+                (jwt_name.clone(), jwt.clone()),
+                &mut pacer,
+            )
+            .await;
+            match result {
+                Ok(r) => all_results.push(r),
+                Err(e) => {
+                    tracing::error!("Error executing operation: {:?}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(all_results)
+    }
 }
 
 /// Tracks how many requests have been sent so far and applies the configured

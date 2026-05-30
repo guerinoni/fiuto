@@ -152,7 +152,7 @@ async fn get_info_simple() {
 
     let s = std::include_str!("../src/testdata/get_info.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
 
     assert!(r.is_ok());
     let r = r.unwrap();
@@ -171,7 +171,7 @@ async fn post_login() {
 
     let s = std::include_str!("../src/testdata/post_login.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
 
     assert!(r.is_ok());
     let r = r.unwrap();
@@ -196,8 +196,11 @@ async fn get_with_jwt() {
 
     let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let token = Some("test_token_get_with_jwt".to_owned());
-    let r = fiuto::do_it(openapi_schema, Some(url), token).await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .jwt("test_token_get_with_jwt")
+        .run()
+        .await;
 
     assert!(r.is_ok());
 
@@ -216,8 +219,11 @@ async fn post_with_jwt() {
 
     let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let token = Some("test_token_post_with_jwt".to_owned());
-    let r = fiuto::do_it(openapi_schema, Some(url), token).await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .jwt("test_token_post_with_jwt")
+        .run()
+        .await;
 
     assert!(r.is_ok());
 
@@ -239,7 +245,7 @@ async fn post_with_nested_property_body() {
 
     let s = std::include_str!("../src/testdata/post_info_nested_property.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
 
     assert!(r.is_ok());
 
@@ -262,7 +268,7 @@ async fn get_without_jwt_returns_401() {
     // this spec requires JWT but we don't provide one
     let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
 
     assert!(r.is_ok());
 
@@ -282,7 +288,7 @@ async fn post_without_jwt_returns_401() {
     // this spec requires JWT but we don't provide one
     let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await;
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
 
     assert!(r.is_ok());
 
@@ -303,7 +309,7 @@ async fn multi_endpoint_runs_get_and_post() {
 
     let s = std::include_str!("../src/testdata/multi_endpoint.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
 
     // one GET endpoint and one POST endpoint
     assert_eq!(r.len(), 2);
@@ -328,7 +334,7 @@ async fn post_without_property_examples_sends_only_empty_payload() {
     // request driven is the empty payload that drill_post_endpoint always adds.
     let s = std::include_str!("../src/testdata/post_login_obj_example.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
 
     assert_eq!(r.len(), 1);
     let combinations = r.first().unwrap();
@@ -343,7 +349,7 @@ async fn deprecated_endpoints_are_skipped_end_to_end() {
 
     let s = std::include_str!("../src/testdata/get_info_deprecated.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url), None).await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
 
     // The only endpoint is deprecated, so nothing is executed.
     assert!(r.is_empty(), "deprecated endpoint should not be called");
@@ -357,7 +363,9 @@ async fn cli_base_url_overrides_spec_server() {
     // take precedence so the request still reaches the live test server.
     let s = std::include_str!("../src/testdata/get_info.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::do_it(openapi_schema, Some(url.clone()), None)
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url.clone())
+        .run()
         .await
         .unwrap();
 
@@ -383,7 +391,10 @@ async fn throttle_delays_between_requests() {
     };
 
     let start = std::time::Instant::now();
-    let r = fiuto::do_it_with_throttle(openapi_schema, Some(url), None, throttle)
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .throttle(throttle)
+        .run()
         .await
         .unwrap();
     let elapsed = start.elapsed();
@@ -411,7 +422,10 @@ async fn throttle_every_skips_when_group_not_reached() {
     };
 
     let start = std::time::Instant::now();
-    let r = fiuto::do_it_with_throttle(openapi_schema, Some(url), None, throttle)
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .throttle(throttle)
+        .run()
         .await
         .unwrap();
     let elapsed = start.elapsed();

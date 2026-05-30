@@ -58,7 +58,15 @@ async fn main() {
         every: args.delay_every.max(1),
     };
 
-    let all_results = match fiuto::do_it_with_throttle(openapi_schema, args.base_url, args.jwt, throttle).await {
+    let mut driller = fiuto::Driller::new(openapi_schema).throttle(throttle);
+    if let Some(base_url) = args.base_url {
+        driller = driller.base_url(base_url);
+    }
+    if let Some(jwt) = args.jwt {
+        driller = driller.jwt(jwt);
+    }
+
+    let all_results = match driller.run().await {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("Error executing operations: {:?}", e);
