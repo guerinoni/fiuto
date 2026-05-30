@@ -12,6 +12,24 @@ pub struct CallResult {
     pub status_code: u16,
 }
 
+/// Controls request pacing so the target API is not flooded into answering
+/// with 429. `delay` is how long to pause and `every` how many requests run
+/// before each pause kicks in.
+#[derive(Debug, Clone, Copy)]
+pub struct Throttle {
+    pub delay: std::time::Duration,
+    pub every: usize,
+}
+
+impl Default for Throttle {
+    fn default() -> Self {
+        Self {
+            delay: std::time::Duration::ZERO,
+            every: 1,
+        }
+    }
+}
+
 /// Execute all operations in the openapi schema
 ///
 /// # Errors
@@ -19,6 +37,18 @@ pub async fn do_it(
     spec: oas3::Spec,
     url: Option<String>,
     jwt: Option<String>,
+) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
+    do_it_with_throttle(spec, url, jwt, Throttle::default()).await
+}
+
+/// Same as [`do_it`] but spaces out the requests according to `throttle`.
+///
+/// # Errors
+pub async fn do_it_with_throttle(
+    spec: oas3::Spec,
+    url: Option<String>,
+    jwt: Option<String>,
+    throttle: Throttle,
 ) -> Result<Vec<Vec<CallResult>>, reqwest::Error> {
     tracing::info!("openapi version: {}", spec.openapi);
 
@@ -37,9 +67,19 @@ pub async fn do_it(
 
     let mut all_results = vec![];
 
+    // Shared across operations so `every` counts requests globally instead of
+    // restarting the count for each endpoint.
+    let mut pacer = Pacer::new(throttle);
+
     for p in operations {
-        let result =
-            exec_operation(&spec, p.clone(), &base_url, (jwt_name.clone(), jwt.clone())).await;
+        let result = exec_operation(
+            &spec,
+            p.clone(),
+            &base_url,
+            (jwt_name.clone(), jwt.clone()),
+            &mut pacer,
+        )
+        .await;
         match result {
             Ok(r) => all_results.push(r),
             Err(e) => {
@@ -50,6 +90,30 @@ pub async fn do_it(
     }
 
     Ok(all_results)
+}
+
+/// Tracks how many requests have been sent so far and applies the configured
+/// throttle. Kept as one value so it can be threaded through the call chain as
+/// a single argument.
+struct Pacer {
+    throttle: Throttle,
+    sent: usize,
+}
+
+impl Pacer {
+    const fn new(throttle: Throttle) -> Self {
+        Self { throttle, sent: 0 }
+    }
+
+    /// Pause before a request once a full group of `every` requests has already
+    /// gone out, so neither the first nor the last request waits for nothing.
+    async fn before_request(&mut self) {
+        let every = self.throttle.every.max(1);
+        if self.sent > 0 && !self.throttle.delay.is_zero() && self.sent.is_multiple_of(every) {
+            tokio::time::sleep(self.throttle.delay).await;
+        }
+        self.sent += 1;
+    }
 }
 
 fn get_jwt_token(spec: &oas3::Spec) -> Option<String> {
@@ -78,6 +142,7 @@ async fn exec_operation(
     op: collector::Op,
     base_url: &str,
     (jwt_name, jwt): (Option<String>, Option<String>),
+    pacer: &mut Pacer,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     // An operation without its own `security` inherits the spec-level requirement
     let security = if op.operation.security.is_empty() {
@@ -87,7 +152,7 @@ async fn exec_operation(
     };
 
     match op.method.as_str() {
-        "GET" => drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), security).await,
+        "GET" => drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), security, pacer).await,
         "POST" => {
             let Some(s) = op.payload else {
                 tracing::warn!("No payload found for POST {}", op.path);
@@ -101,6 +166,7 @@ async fn exec_operation(
                 (jwt_name, jwt),
                 security,
                 spec,
+                pacer,
             )
             .await
         }
@@ -116,6 +182,7 @@ async fn drill_get_endpoint(
     path: &str,
     (jwt_name, jwt): (Option<String>, Option<String>),
     security: &[oas3::spec::SecurityRequirement],
+    pacer: &mut Pacer,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
@@ -138,6 +205,7 @@ async fn drill_get_endpoint(
         tracing::error!("Error building request: {:?}", e);
         e
     })?;
+    pacer.before_request().await;
     let resp = client.execute(r).await?;
 
     Ok(vec![CallResult {
@@ -154,6 +222,7 @@ async fn drill_post_endpoint(
     (jwt_name, jwt): (Option<String>, Option<String>),
     security: &[oas3::spec::SecurityRequirement],
     spec: &oas3::Spec,
+    pacer: &mut Pacer,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
     let url = format!("{base_url}{path}");
 
@@ -196,6 +265,7 @@ async fn drill_post_endpoint(
         }
 
         let r = req.build().unwrap(); // TODO: handle the error
+        pacer.before_request().await;
         let resp = client.execute(r).await?;
 
         tracing::info!("Response: {:?}", resp);

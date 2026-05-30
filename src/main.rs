@@ -21,6 +21,14 @@ struct Args {
     /// Print the raw per-request results as JSON before the summary
     #[clap(long)]
     json: bool,
+
+    /// Milliseconds to wait between requests to avoid hitting rate limits (429)
+    #[clap(long, default_value_t = 0)]
+    delay: u64,
+
+    /// Apply the delay only after every N requests instead of after each one
+    #[clap(long = "delay-every", default_value_t = 1)]
+    delay_every: usize,
 }
 
 #[tokio::main]
@@ -45,7 +53,12 @@ async fn main() {
         }
     };
 
-    let all_results = match fiuto::do_it(openapi_schema, args.base_url, args.jwt).await {
+    let throttle = fiuto::Throttle {
+        delay: std::time::Duration::from_millis(args.delay),
+        every: args.delay_every.max(1),
+    };
+
+    let all_results = match fiuto::do_it_with_throttle(openapi_schema, args.base_url, args.jwt, throttle).await {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("Error executing operations: {:?}", e);

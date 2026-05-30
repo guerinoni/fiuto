@@ -368,3 +368,58 @@ async fn cli_base_url_overrides_spec_server() {
     );
     assert_eq!(endpoint_results[0].status_code, 200);
 }
+
+#[tokio::test]
+async fn throttle_delays_between_requests() {
+    let url = run_api().await;
+
+    // multi_endpoint drives 1 GET plus 8 POST combinations, so 9 requests run.
+    let s = std::include_str!("../src/testdata/multi_endpoint.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+
+    let throttle = fiuto::Throttle {
+        delay: std::time::Duration::from_millis(80),
+        every: 1,
+    };
+
+    let start = std::time::Instant::now();
+    let r = fiuto::do_it_with_throttle(openapi_schema, Some(url), None, throttle)
+        .await
+        .unwrap();
+    let elapsed = start.elapsed();
+
+    let total: usize = r.iter().map(std::vec::Vec::len).sum();
+    assert_eq!(total, 9);
+
+    // With `every = 1` the runner pauses before every request but the first,
+    // so at least (total - 1) delays must have elapsed.
+    let min = std::time::Duration::from_millis(80) * u32::try_from(total - 1).unwrap();
+    assert!(elapsed >= min, "expected at least {min:?}, took {elapsed:?}");
+}
+
+#[tokio::test]
+async fn throttle_every_skips_when_group_not_reached() {
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/multi_endpoint.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+
+    // A huge step the 9 requests never reach means no pause is ever taken.
+    let throttle = fiuto::Throttle {
+        delay: std::time::Duration::from_secs(5),
+        every: 1000,
+    };
+
+    let start = std::time::Instant::now();
+    let r = fiuto::do_it_with_throttle(openapi_schema, Some(url), None, throttle)
+        .await
+        .unwrap();
+    let elapsed = start.elapsed();
+
+    let total: usize = r.iter().map(std::vec::Vec::len).sum();
+    assert_eq!(total, 9);
+    assert!(
+        elapsed < std::time::Duration::from_secs(1),
+        "no delay expected, took {elapsed:?}"
+    );
+}
