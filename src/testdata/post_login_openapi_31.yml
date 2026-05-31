@@ -1,0 +1,48 @@
+openapi: 3.1.0
+info:
+  title: fiuto OpenAPI 3.1 Spec
+  description: Same login endpoint as post_login but written for OpenAPI 3.1.x
+  version: "1.0.0"
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local host test
+
+paths:
+  /api/v1/login:
+    post:
+      operationId: "login"
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful login
+
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - org
+        - password
+      properties:
+        email:
+          type: string
+          example: "federico@fiuto.io"
+        org:
+          type: string
+          example: "fiuto"
+        password:
+          type: string
+          example: "CiaoCiao1234$#"
+        # 3.1 nullable form: type as a list including "null" instead of the
+        # 3.0 `nullable: true` keyword. The server ignores this extra field.
+        note:
+          type: [string, "null"]
+          example: "optional note"

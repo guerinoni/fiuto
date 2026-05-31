@@ -205,6 +205,41 @@ async fn post_login() {
 }
 
 #[tokio::test]
+async fn post_login_openapi_31_drills_end_to_end() {
+    let url = run_api().await;
+
+    // Same login endpoint as post_login but the spec is OpenAPI 3.1.x and adds
+    // a nullable `note` field using the 3.1 `type: [string, "null"]` form. This
+    // exercises the whole pipeline (parse, collect, dig, drill) on a 3.1 doc.
+    let s = std::include_str!("../src/testdata/post_login_openapi_31.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    assert_eq!(openapi_schema.openapi, "3.1.0");
+
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(r.len(), 1);
+
+    let combinations = r.first().unwrap();
+    // 4 properties carry an example, so 2^4 - 1 combinations + 1 empty = 16.
+    assert_eq!(combinations.len(), 16);
+
+    // login_handler ignores the extra `note`, so any payload carrying email,
+    // org and password succeeds: that is the 2 subsets where note is present or
+    // absent. The rest are missing a required field and return 422.
+    let success_count = combinations.iter().filter(|c| c.status_code == 200).count();
+    let error_count = combinations.iter().filter(|c| c.status_code == 422).count();
+    assert_eq!(
+        success_count, 2,
+        "complete payloads (note optional) should succeed"
+    );
+    assert_eq!(error_count, 14, "incomplete payloads should return 422");
+}
+
+#[tokio::test]
 async fn get_with_jwt() {
     let url = run_api().await;
 
