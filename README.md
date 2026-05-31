@@ -62,6 +62,7 @@ The request count is global across all endpoints. The pause is skipped before th
 
 ## Features
 
+- [x] drill GET, POST and PUT endpoints
 - [x] test every combination of input request
 - [x] uses examples provided in the spec
 - [x] json result easy to parse
@@ -74,7 +75,7 @@ The request count is global across all endpoints. The pause is skipped before th
 ## Limitations
 
 - only drills endpoints with `content: application/json`
-- a POST request must have a `requestBody` with `$ref`
+- a POST or PUT request must have a `requestBody` with `$ref`
 - the spec must contain a `components` section with the struct referenced above
 - every `property` of the component schema needs an `example` (or a full example for the whole object); fiuto builds payloads from those `example` fields
 
@@ -98,7 +99,6 @@ cargo clippy
 - allow selecting a server from the spec `servers` list as base URL
 - test `nullable` fields
 - support GET with payload
-- missing PUT
 - support POST with form bodies, for example:
 ```yaml
 requestBody:

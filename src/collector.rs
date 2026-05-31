@@ -33,6 +33,21 @@ pub fn collect_gets(spec: &Spec) -> Vec<Op> {
 }
 
 pub fn collect_post(spec: &Spec) -> Vec<Op> {
+    collect_with_body(spec, "POST", |item| item.post.as_ref())
+}
+
+pub fn collect_put(spec: &Spec) -> Vec<Op> {
+    collect_with_body(spec, "PUT", |item| item.put.as_ref())
+}
+
+/// Collects operations that carry a JSON request body (POST, PUT). The `pick`
+/// closure selects which operation slot of the path item to read, so the same
+/// filtering and payload resolution is shared across methods.
+fn collect_with_body(
+    spec: &Spec,
+    method: &str,
+    pick: impl Fn(&oas3::spec::PathItem) -> Option<&Operation>,
+) -> Vec<Op> {
     let Some(paths) = &spec.paths else {
         return vec![];
     };
@@ -40,7 +55,7 @@ pub fn collect_post(spec: &Spec) -> Vec<Op> {
     let mut ops: Vec<Op> = paths
         .iter()
         .filter_map(|(path, item)| {
-            let op = item.post.as_ref()?;
+            let op = pick(item)?;
             if op.deprecated.unwrap_or(false) {
                 return None;
             }
@@ -53,7 +68,7 @@ pub fn collect_post(spec: &Spec) -> Vec<Op> {
 
             Some(Op {
                 path: path.clone(),
-                method: "POST".to_owned(),
+                method: method.to_owned(),
                 operation: op.clone(),
                 payload: None,
             })
@@ -230,6 +245,30 @@ mod tests {
 
         assert_eq!(collect_gets(&spec).len(), 1);
         assert_eq!(collect_post(&spec).len(), 0);
+    }
+
+    #[test]
+    fn scan_put() {
+        let s = std::include_str!("./testdata/put_settings.yml");
+        let spec = parse_openapi(s).unwrap();
+        let puts = collect_put(&spec);
+        assert_eq!(puts.len(), 1);
+
+        let f = puts.first().unwrap();
+        assert_eq!(f.method, "PUT");
+        assert_eq!(f.path, "/api/v1/org/settings");
+        // payload should be resolved from the requestBody $ref
+        assert!(f.payload.is_some());
+    }
+
+    #[test]
+    fn put_only_spec_has_no_gets_or_posts() {
+        let s = std::include_str!("./testdata/put_settings.yml");
+        let spec = parse_openapi(s).unwrap();
+
+        assert_eq!(collect_gets(&spec).len(), 0);
+        assert_eq!(collect_post(&spec).len(), 0);
+        assert_eq!(collect_put(&spec).len(), 1);
     }
 
     #[test]

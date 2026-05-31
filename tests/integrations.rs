@@ -12,6 +12,7 @@ async fn run_api() -> String {
         .route("/api/v1/login", axum::routing::post(login_handler))
         .route("/api/v1/org/info", axum::routing::post(post_info))
         .route("/api/v1/org/hq", axum::routing::post(post_hq))
+        .route("/api/v1/org/settings", axum::routing::put(put_settings))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -134,6 +135,13 @@ async fn post_hq(axum::Json(payload): axum::Json<Info>) -> axum::Json<String> {
     axum::Json("ok".to_string())
 }
 
+// SettingsRequest needs the address field, so an empty payload is rejected with
+// 422 while the complete one succeeds, same shape used to test POST drilling.
+async fn put_settings(axum::Json(payload): axum::Json<InfoRequest>) -> axum::Json<String> {
+    tracing::info!("put settings received: {:?}", payload);
+    axum::Json("ok".to_string())
+}
+
 // this return the token populated during the request, this way we can use it for test checks.
 async fn more_info(claims: Claims) -> axum::Json<String> {
     axum::Json(claims.token_received)
@@ -152,7 +160,10 @@ async fn get_info_simple() {
 
     let s = std::include_str!("../src/testdata/get_info.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await;
 
     assert!(r.is_ok());
     let r = r.unwrap();
@@ -171,7 +182,10 @@ async fn post_login() {
 
     let s = std::include_str!("../src/testdata/post_login.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await;
 
     assert!(r.is_ok());
     let r = r.unwrap();
@@ -245,7 +259,10 @@ async fn post_with_nested_property_body() {
 
     let s = std::include_str!("../src/testdata/post_info_nested_property.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await;
 
     assert!(r.is_ok());
 
@@ -268,7 +285,10 @@ async fn get_without_jwt_returns_401() {
     // this spec requires JWT but we don't provide one
     let s = std::include_str!("../src/testdata/get_more_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await;
 
     assert!(r.is_ok());
 
@@ -288,7 +308,10 @@ async fn post_without_jwt_returns_401() {
     // this spec requires JWT but we don't provide one
     let s = std::include_str!("../src/testdata/post_info_with_jwt.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await;
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await;
 
     assert!(r.is_ok());
 
@@ -304,12 +327,41 @@ async fn post_without_jwt_returns_401() {
 }
 
 #[tokio::test]
+async fn put_drills_request_body() {
+    let url = run_api().await;
+
+    let s = std::include_str!("../src/testdata/put_settings.yml");
+    let openapi_schema = fiuto::parse_openapi(s).unwrap();
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(r.len(), 1);
+
+    let combinations = r.first().unwrap();
+    // SettingsRequest has 1 property (address): 2^1 - 1 + 1 empty = 2 combinations
+    assert_eq!(combinations.len(), 2);
+
+    // complete payload succeeds, empty one is rejected with 422
+    let success = combinations.iter().filter(|c| c.status_code == 200).count();
+    let rejected = combinations.iter().filter(|c| c.status_code == 422).count();
+    assert_eq!(success, 1, "complete PUT payload should succeed");
+    assert_eq!(rejected, 1, "empty PUT payload should be rejected");
+}
+
+#[tokio::test]
 async fn multi_endpoint_runs_get_and_post() {
     let url = run_api().await;
 
     let s = std::include_str!("../src/testdata/multi_endpoint.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await
+        .unwrap();
 
     // one GET endpoint and one POST endpoint
     assert_eq!(r.len(), 2);
@@ -334,7 +386,11 @@ async fn post_without_property_examples_sends_only_empty_payload() {
     // request driven is the empty payload that drill_post_endpoint always adds.
     let s = std::include_str!("../src/testdata/post_login_obj_example.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await
+        .unwrap();
 
     assert_eq!(r.len(), 1);
     let combinations = r.first().unwrap();
@@ -349,7 +405,11 @@ async fn deprecated_endpoints_are_skipped_end_to_end() {
 
     let s = std::include_str!("../src/testdata/get_info_deprecated.yml");
     let openapi_schema = fiuto::parse_openapi(s).unwrap();
-    let r = fiuto::Driller::new(openapi_schema).base_url(url).run().await.unwrap();
+    let r = fiuto::Driller::new(openapi_schema)
+        .base_url(url)
+        .run()
+        .await
+        .unwrap();
 
     // The only endpoint is deprecated, so nothing is executed.
     assert!(r.is_empty(), "deprecated endpoint should not be called");
@@ -405,7 +465,10 @@ async fn throttle_delays_between_requests() {
     // With `every = 1` the runner pauses before every request but the first,
     // so at least (total - 1) delays must have elapsed.
     let min = std::time::Duration::from_millis(80) * u32::try_from(total - 1).unwrap();
-    assert!(elapsed >= min, "expected at least {min:?}, took {elapsed:?}");
+    assert!(
+        elapsed >= min,
+        "expected at least {min:?}, took {elapsed:?}"
+    );
 }
 
 #[tokio::test]

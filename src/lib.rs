@@ -94,11 +94,13 @@ impl Driller {
         let jwt_name = get_jwt_token(&spec);
 
         let posts = collector::collect_post(&spec);
+        let puts = collector::collect_put(&spec);
         let gets = collector::collect_gets(&spec);
 
         let mut operations = vec![];
         operations.extend_from_slice(gets.as_slice());
         operations.extend_from_slice(posts.as_slice());
+        operations.extend_from_slice(puts.as_slice());
 
         let mut all_results = vec![];
 
@@ -189,22 +191,21 @@ async fn exec_operation(
 
     match op.method.as_str() {
         "GET" => drill_get_endpoint(base_url, &op.path, (jwt_name, jwt), security, pacer).await,
-        "POST" => {
+        "POST" | "PUT" => {
             let Some(s) = op.payload else {
-                tracing::warn!("No payload found for POST {}", op.path);
+                tracing::warn!("No payload found for {} {}", op.method, op.path);
                 return Ok(vec![]);
             };
 
-            drill_post_endpoint(
-                base_url,
-                op.path.as_str(),
-                &s,
-                (jwt_name, jwt),
-                security,
-                spec,
-                pacer,
-            )
-            .await
+            // POST and PUT drill the same way, only the verb differs.
+            let method = if op.method == "PUT" {
+                reqwest::Method::PUT
+            } else {
+                reqwest::Method::POST
+            };
+
+            let url = format!("{base_url}{}", op.path);
+            drill_body_endpoint(method, url, &s, (jwt_name, jwt), security, spec, pacer).await
         }
         _ => {
             tracing::warn!("Unsupported method: {}", op.method);
@@ -251,17 +252,15 @@ async fn drill_get_endpoint(
     }])
 }
 
-async fn drill_post_endpoint(
-    base_url: &str,
-    path: &str,
+async fn drill_body_endpoint(
+    method: reqwest::Method,
+    url: String,
     payload: &oas3::spec::ObjectSchema,
     (jwt_name, jwt): (Option<String>, Option<String>),
     security: &[oas3::spec::SecurityRequirement],
     spec: &oas3::Spec,
     pacer: &mut Pacer,
 ) -> Result<Vec<CallResult>, reqwest::Error> {
-    let url = format!("{base_url}{path}");
-
     let client = reqwest::Client::new();
 
     let mut responses = vec![];
@@ -286,7 +285,7 @@ async fn drill_post_endpoint(
         tracing::info!("Payload: {}", s);
 
         let mut req = client
-            .request(reqwest::Method::POST, url.clone())
+            .request(method.clone(), url.clone())
             .body(s.clone())
             .header("Content-Type", "application/json"); // TODO: Make this configurable
 
